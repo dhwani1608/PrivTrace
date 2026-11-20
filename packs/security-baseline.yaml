@@ -1,0 +1,168 @@
+# OWASP-style security baseline. References are CWE / OWASP Top 10 identifiers.
+id: security-baseline
+name: Security baseline (OWASP-style)
+short_name: Security
+jurisdiction: Global
+version: "2026-01"
+source_url: https://owasp.org/Top10/
+description: >
+  Application security basics that every privacy framework assumes: no hardcoded
+  secrets, hashed passwords, parameterised SQL, safe configuration and transport.
+
+rules:
+  - id: SECB-SECRET-01
+    title: Hardcoded secrets or API keys
+    reference: "CWE-798 Use of Hard-coded Credentials; OWASP Top 10:2021 A07"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/798.html
+    severity: critical
+    check_type: automated
+    detector: hardcoded_secrets
+    why_it_matters: Anyone with read access to the repo (or a leaked copy) can use the key to reach your data and bill your accounts.
+    remediation: Move secrets to environment variables or a secret manager (e.g. Google Secret Manager), rotate the exposed keys.
+    tags: [secrets]
+
+  - id: SECB-SECRET-02
+    title: .env file committed to the repository
+    reference: "CWE-540 Inclusion of Sensitive Information in Source Code"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/540.html
+    severity: high
+    check_type: automated
+    detector: committed_env_file
+    why_it_matters: .env files usually hold production credentials and stay in git history even after deletion.
+    remediation: Remove the file, add `.env` to .gitignore, commit a `.env.example` with placeholders, rotate the secrets.
+    tags: [secrets]
+
+  - id: SECB-PWD-01
+    title: Plaintext or weakly hashed passwords
+    reference: "CWE-256 Plaintext Storage of a Password; CWE-916 Insufficient Computational Effort; OWASP Top 10:2021 A02"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/916.html
+    severity: critical
+    check_type: automated
+    detector: plaintext_passwords
+    why_it_matters: A leaked table of plaintext or MD5/SHA passwords can be cracked quickly and reused against other services.
+    remediation: Use bcrypt or argon2 via passlib/argon2-cffi; migrate existing hashes on next login.
+    tags: [credentials]
+
+  - id: SECB-INJ-01
+    title: SQL built with string formatting
+    reference: "CWE-89 SQL Injection; OWASP Top 10:2021 A03 Injection"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/89.html
+    severity: high
+    check_type: automated
+    detector: sql_string_building
+    why_it_matters: User input concatenated into SQL can read or delete any data in the database.
+    remediation: >
+      Use bound parameters, e.g. execute("... WHERE id = :id", {"id": user_id}), or the ORM query builder.
+    tags: [injection]
+
+  - id: SECB-CFG-01
+    title: Debug mode enabled
+    reference: "CWE-489 Active Debug Code; OWASP Top 10:2021 A05 Security Misconfiguration"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/489.html
+    severity: medium
+    check_type: automated
+    detector: debug_mode_enabled
+    why_it_matters: Debug mode exposes stack traces, config and sometimes interactive consoles to anyone who triggers an error.
+    remediation: Drive debug from an environment variable that defaults to off; never enable it in production.
+    tags: [configuration]
+
+  - id: SECB-CFG-02
+    title: CORS open to all origins
+    reference: "CWE-942 Permissive Cross-domain Policy with Untrusted Domains; OWASP Top 10:2021 A05"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/942.html
+    severity: medium
+    check_type: automated
+    detector: cors_wildcard
+    why_it_matters: Any website can call your API from a user's browser, which can expose user data.
+    remediation: List the exact frontend origins in `allow_origins`.
+    tags: [configuration]
+
+  - id: SECB-TLS-01
+    title: Plain HTTP or disabled TLS verification for external calls
+    reference: "CWE-319 Cleartext Transmission of Sensitive Information; CWE-295 Improper Certificate Validation; OWASP Top 10:2021 A02"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/319.html
+    severity: high
+    check_type: automated
+    detector: insecure_transport
+    why_it_matters: Data sent over plain HTTP or with verification disabled can be read or altered in transit.
+    remediation: Use https:// endpoints and keep certificate verification on.
+    tags: [transport]
+
+  - id: SECB-AUTH-01
+    title: DELETE endpoints without an auth dependency
+    reference: "CWE-306 Missing Authentication for Critical Function"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/306.html
+    severity: high
+    check_type: automated
+    detector: delete_endpoints_authenticated
+    why_it_matters: An unauthenticated delete endpoint lets anyone delete other users' data.
+    remediation: Require an authenticated user (e.g. `Depends(get_current_user)`) and check they own the resource.
+    tags: [auth]
+
+  - id: SECB-LOG-01
+    title: Sensitive information in log files
+    reference: "CWE-532 Insertion of Sensitive Information into Log File; OWASP Top 10:2021 A09"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/532.html
+    severity: high
+    check_type: automated
+    detector: pii_in_logs
+    why_it_matters: Logs are widely accessible and long-lived; personal data in them leaks easily.
+    remediation: Log IDs not values, never log request bodies, and install a redacting log filter.
+    tags: [logging]
+
+  - id: SECB-LLM-01
+    title: Sensitive information disclosed to an LLM
+    reference: "OWASP Top 10 for LLM Applications 2025, LLM02 Sensitive Information Disclosure"
+    reference_verified: false
+    source_url: https://genai.owasp.org/llm-top-10/
+    severity: high
+    check_type: automated
+    detector: pii_to_llm_unredacted
+    why_it_matters: Prompts can be retained by the provider, appear in model outputs, or be exposed through prompt injection.
+    remediation: Redact identifiers before prompting; pass only what the model needs.
+    tags: [ai]
+
+  - id: SECB-DATA-01
+    title: Personal identifiers hardcoded in code, fixtures or sample data
+    reference: "CWE-359 Exposure of Private Personal Information to an Unauthorized Actor"
+    reference_verified: true
+    source_url: https://cwe.mitre.org/data/definitions/359.html
+    severity: medium
+    check_type: automated
+    detector: identifiers_hardcoded
+    why_it_matters: Real identifiers in a repo spread to every clone, CI log and backup.
+    remediation: Replace with obviously fake values (e.g. generated test IDs) and purge from git history if real.
+    tags: [data]
+
+  - id: SECB-MAN-01
+    title: Dependency vulnerability scanning
+    reference: "OWASP Top 10:2021 A06 Vulnerable and Outdated Components"
+    reference_verified: true
+    source_url: https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/
+    severity: medium
+    check_type: manual
+    question: Do you run automated dependency vulnerability scanning (e.g. pip-audit, Dependabot) in CI?
+    why_it_matters: Most real-world breaches use known vulnerabilities in outdated libraries.
+    remediation: Enable Dependabot or add `pip-audit` / `npm audit` to CI and fix findings.
+    tags: [supply-chain]
+
+  - id: SECB-MAN-02
+    title: Encryption at rest for production data stores
+    reference: "OWASP Top 10:2021 A02 Cryptographic Failures"
+    reference_verified: true
+    source_url: https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+    severity: high
+    check_type: manual
+    question: Are production databases, caches, vector stores and backups encrypted at rest?
+    why_it_matters: Disk-level encryption protects data if storage media or snapshots leak.
+    remediation: Enable encryption at rest on Cloud SQL, Memorystore, storage buckets and backups (default on most GCP services — confirm).
+    tags: [encryption]

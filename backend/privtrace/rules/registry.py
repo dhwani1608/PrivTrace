@@ -25,6 +25,7 @@ def register_check(name: str) -> Callable[[CheckFn], CheckFn]:
 
 
 def get_check(name: str) -> CheckFn:
+    _ensure_loaded()
     try:
         return _CHECKS[name]
     except KeyError as e:

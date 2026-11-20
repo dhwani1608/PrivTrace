@@ -1,0 +1,222 @@
+# Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025 (India)
+#
+# Every reference below is reference_verified: false until checked against the
+# official text by a human. See docs/LEGAL_REVIEW_TODO.md.
+id: dpdp-2023
+name: Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025
+short_name: DPDP
+jurisdiction: IN
+version: "2025-11"
+source_url: https://www.meity.gov.in/data-protection-framework
+description: >
+  India's personal data protection law for Data Fiduciaries: notice and consent,
+  purpose and storage limitation, security safeguards, breach intimation, erasure,
+  children's data and processor obligations.
+
+rules:
+  - id: DPDP-SEC-01
+    title: Personal data sent to third-party AI without redaction
+    reference: "DPDP Act 2023, s.8(5) (reasonable security safeguards); DPDP Rules 2025, Rule 6"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: critical
+    check_type: automated
+    detector: pii_to_llm_unredacted
+    why_it_matters: >
+      Prompts sent to an LLM API leave your systems and may be logged or retained by the
+      provider. Sending names, phone numbers or ID numbers there without need widens who
+      can see the data and makes a breach more likely.
+    remediation: >
+      Redact or pseudonymise identifiers before building prompts (e.g. replace PAN/phone/email
+      with placeholders), send only the fields the task needs, and keep the mapping server-side.
+    tags: [ai, third-party, security]
+
+  - id: DPDP-SEC-02
+    title: Personal data written to application logs
+    reference: "DPDP Act 2023, s.8(5) (reasonable security safeguards); DPDP Rules 2025, Rule 6"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: automated
+    detector: pii_in_logs
+    why_it_matters: >
+      Logs are copied to many places (log platforms, support tickets, backups) and are rarely
+      covered by access controls or erasure. Personal data in logs is a common breach source.
+    remediation: >
+      Log identifiers (user_id, request_id) instead of personal fields, never log raw request
+      bodies, and add a redacting logging filter as a safety net.
+    tags: [logging, security]
+
+  - id: DPDP-SEC-03
+    title: Passwords stored or logged without hashing
+    reference: "DPDP Act 2023, s.8(5) (reasonable security safeguards)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: critical
+    check_type: automated
+    detector: plaintext_passwords
+    why_it_matters: >
+      A database leak exposes every user's password, which people reuse elsewhere. Plaintext or
+      fast-hashed (MD5/SHA) passwords are not a reasonable safeguard.
+    remediation: Hash passwords with bcrypt or argon2 (e.g. passlib CryptContext) and never log them.
+    tags: [credentials, security]
+
+  - id: DPDP-SEC-04
+    title: Sensitive identifiers stored without encryption or masking
+    reference: "DPDP Act 2023, s.8(5); DPDP Rules 2025, Rule 6 (encryption, obfuscation or masking)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: automated
+    detector: sensitive_data_unprotected_at_rest
+    why_it_matters: >
+      Government IDs and financial identifiers are high-value targets. Encrypting or masking them
+      limits the damage of a database or backup leak.
+    remediation: >
+      Encrypt sensitive columns at the application layer (or use DB column encryption), store only
+      masked/last-4 values where full values aren't needed.
+    tags: [security, encryption]
+
+  - id: DPDP-ERA-01
+    title: Erasure does not reach every store holding personal data
+    reference: "DPDP Act 2023, s.8(7) (erasure on withdrawal / purpose served) and s.12 (right to erasure)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: critical
+    check_type: automated
+    detector: erasure_covers_all_stores
+    why_it_matters: >
+      When a user withdraws consent or asks for erasure, their data must be removed everywhere
+      you keep it. Deleting only the main DB row leaves copies in caches, vector stores and files.
+    remediation: >
+      Make the delete-user handler remove the user's data from every store found in the data-flow
+      map (DB rows, embeddings, cache keys, files), or enqueue a job that does, and test it.
+    tags: [erasure, rights]
+
+  - id: DPDP-RET-01
+    title: Personal data cached with no expiry
+    reference: "DPDP Act 2023, s.8(7) (erase when the specified purpose is no longer served)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: automated
+    detector: cache_pii_without_ttl
+    why_it_matters: Cache entries without a TTL live forever and are usually forgotten by erasure processes.
+    remediation: Set a TTL on every cache write that contains personal data (e.g. redis `set(..., ex=3600)`).
+    tags: [retention, cache]
+
+  - id: DPDP-RET-02
+    title: No retention / purge mechanism for stored personal data
+    reference: "DPDP Act 2023, s.8(7) and s.8(8); DPDP Rules 2025, Rule 8 (time period for erasure)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: hybrid
+    detector: retention_mechanism_present
+    question: Do you have a documented retention period for each kind of personal data, and a job that erases it when the period ends?
+    why_it_matters: Keeping personal data indefinitely increases breach impact and conflicts with storage limitation.
+    remediation: Define retention periods per data type and add a scheduled purge job (or DB/storage lifecycle policies).
+    tags: [retention]
+
+  - id: DPDP-CON-01
+    title: Notice / consent not captured where personal data is collected
+    reference: "DPDP Act 2023, s.5 (notice) and s.6 (consent); DPDP Rules 2025, Rule 3"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: hybrid
+    detector: consent_captured_at_collection
+    question: Before collecting personal data, do you show a notice of what is collected and why, and record the user's consent (with timestamp and notice version)?
+    why_it_matters: >
+      Consent must be free, specific, informed and unambiguous, and you must be able to show when
+      and to which notice it was given.
+    remediation: >
+      Add consent fields to sign-up/collection models (e.g. `consent_given`, `consent_purpose`,
+      `notice_version`, `consented_at`) and store them with the record.
+    tags: [consent, notice]
+
+  - id: DPDP-MIN-01
+    title: Sensitive identifiers collected — confirm necessity
+    reference: "DPDP Act 2023, s.6(1) (consent limited to personal data necessary for the specified purpose)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: automated
+    detector: minimisation_sensitive_fields
+    why_it_matters: Every extra identifier you collect is one more thing that can leak and that you must protect and erase.
+    remediation: Drop fields not needed for the stated purpose, or make them optional and collect them only when needed.
+    tags: [minimisation]
+
+  - id: DPDP-TP-01
+    title: Personal data shared with third parties (APIs, analytics, AI)
+    reference: "DPDP Act 2023, s.8(1) and s.8(2) (responsibility for processing by Data Processors)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: automated
+    detector: pii_to_third_party
+    detector_params: {hit_status: needs_review}
+    why_it_matters: You stay responsible for personal data you hand to processors such as LLM vendors, analytics or SMS providers.
+    remediation: List every third party that receives personal data, send only what each needs, and cover each with a contract.
+    tags: [third-party, processors]
+
+  - id: DPDP-PRC-01
+    title: Contracts with Data Processors (including AI vendors)
+    reference: "DPDP Act 2023, s.8(2) (engage a Data Processor only under a valid contract)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: manual
+    question: Do you have a signed contract with every Data Processor (including LLM / AI API vendors) that processes personal data for you?
+    why_it_matters: Without a contract you cannot control how a vendor uses, retains or deletes your users' data.
+    remediation: Sign a data processing agreement with each vendor covering purpose, security, retention and deletion.
+    tags: [processors, contracts]
+
+  - id: DPDP-BRE-01
+    title: Personal data breach intimation process
+    reference: "DPDP Act 2023, s.8(6) (intimation of breach to the Board and affected Data Principals); DPDP Rules 2025, Rule 7"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: manual
+    question: Do you have a documented process to detect a personal data breach and notify the Data Protection Board and each affected user within the prescribed time?
+    why_it_matters: Breach notification deadlines are short; without a rehearsed process they are easy to miss.
+    remediation: Write and rehearse an incident runbook with owners, templates and timelines.
+    tags: [breach, incident]
+
+  - id: DPDP-CHD-01
+    title: Children's personal data and verifiable parental consent
+    reference: "DPDP Act 2023, s.9 (processing of personal data of children); DPDP Rules 2025, Rule 10"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: high
+    check_type: hybrid
+    detector: children_age_gate
+    question: If people under 18 can use the service, do you obtain verifiable parental consent and avoid tracking or targeted advertising directed at them?
+    why_it_matters: Processing children's data has stricter conditions, including verifiable parental consent.
+    remediation: Add an age check at sign-up and a verifiable parental-consent flow for users under 18.
+    tags: [children, consent]
+
+  - id: DPDP-GRV-01
+    title: Contact person and grievance redressal published
+    reference: "DPDP Act 2023, s.8(9) (contact details), s.8(10) and s.13 (grievance redressal)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: manual
+    question: Have you published the contact details of a DPO or a person who can answer questions about data processing, and a way for users to raise grievances?
+    why_it_matters: Users need a reachable channel to exercise their rights and complain.
+    remediation: Publish a privacy contact and grievance process in the app and privacy notice, and staff it.
+    tags: [rights, governance]
+
+  - id: DPDP-XB-01
+    title: Cross-border transfer of personal data
+    reference: "DPDP Act 2023, s.16 (processing outside India)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/data-protection-framework
+    severity: medium
+    check_type: manual
+    question: Where personal data is processed outside India (e.g. a foreign LLM API region), have you confirmed the destination is not restricted by Central Government notification?
+    why_it_matters: The Central Government may restrict transfers to notified countries; cloud and AI APIs often process data abroad.
+    remediation: Record the processing region of each vendor and prefer India regions where available.
+    tags: [cross-border, third-party]

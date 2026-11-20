@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from privtrace import DISCLAIMER, __version__
+from privtrace import __version__
 from privtrace.packs.loader import PackLoadError, load_packs
 
 app = typer.Typer(help="PrivTrace: scan code against compliance packs.", no_args_is_help=True)
@@ -67,16 +67,102 @@ def facts(
         typer.echo(data)
 
 
+def _load_answers(answers_file: Path | None, answer: list[str]) -> dict:
+    import json
+
+    from privtrace.models.enums import ManualAnswerValue
+
+    raw: dict[str, str] = {}
+    if answers_file:
+        raw.update(json.loads(answers_file.read_text(encoding="utf-8")))
+    for item in answer:
+        if "=" not in item:
+            raise typer.BadParameter(f"--answer expects RULE_ID=yes|no|not_sure, got {item!r}")
+        k, v = item.split("=", 1)
+        raw[k.strip()] = v.strip().lower().replace("-", "_").replace(" ", "_")
+    try:
+        return {k: ManualAnswerValue(v) for k, v in raw.items()}
+    except ValueError as e:
+        raise typer.BadParameter(f"answers must be yes / no / not_sure: {e}") from e
+
+
+_STATUS_STYLE = {
+    "passed": "[green]passed[/green]",
+    "failed": "[red]failed[/red]",
+    "needs_review": "[yellow]needs review[/yellow]",
+    "not_assessable": "[dim]not assessable[/dim]",
+}
+
+
+def print_summary(result) -> None:
+    from privtrace.models.enums import RuleStatus
+
+    score = "n/a" if result.overall_score is None else f"{result.overall_score:.0f}/100"
+    console.rule(f"PrivTrace · {result.target}")
+    console.print(f"Overall score: [bold]{score}[/bold]   Risk level: [bold]{result.risk_level.value}[/bold]")
+    t = Table("Framework", "Score", "Passed", "Failed", "Review", "N/A", "Coverage")
+    for ps in result.pack_scores:
+        c = ps.coverage
+        t.add_row(
+            ps.short_name, "n/a" if ps.score is None else f"{ps.score:.0f}",
+            str(ps.passed), str(ps.failed), str(ps.needs_review), str(ps.not_assessable),
+            f"{c.automated_checked}/{c.total} auto, {c.manual_answered} manual, {c.not_assessable} n/a",
+        )
+    console.print(t)
+    failed = [r for r in result.results if r.status == RuleStatus.failed]
+    failed.sort(key=lambda r: -r.severity.rank)
+    for r in failed:
+        console.print()
+        console.print(f"[red]✗[/red] [bold]{r.rule_id}[/bold] ({r.severity.value}) {escape(r.title)}")
+        console.print(f"  {escape(r.message)}")
+        for e in r.evidence[:5]:
+            console.print(f"  [cyan]{escape(e.file)}:{e.line}[/cyan] {escape(e.detail)}")
+        if len(r.evidence) > 5:
+            console.print(f"  [dim]… {len(r.evidence) - 5} more[/dim]")
+    console.print()
+    console.print(f"[dim]{result.disclaimer}[/dim]")
+
+
 @app.command()
 def scan(
-    target: Path = typer.Argument(..., help="Local folder to scan."),
+    target: Path = typer.Argument(..., exists=True, file_okay=False, help="Local folder to scan."),
     packs: str = typer.Option("dpdp,security", help="Comma-separated pack ids or aliases."),
     out: Path | None = typer.Option(None, help="Write report (.html or .json)."),
+    answers_file: Path | None = typer.Option(None, "--answers", help="JSON file {rule_id: yes|no|not_sure}."),
+    answer: list[str] = typer.Option([], "--answer", help="RULE_ID=yes|no|not_sure (repeatable)."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
 ) -> None:
-    """Scan a codebase (implemented in later milestones)."""
-    console.print("[yellow]scan is not implemented yet (milestone 3+).[/yellow]")
-    console.print(f"[dim]{DISCLAIMER}[/dim]")
-    raise typer.Exit(1)
+    """Scan a local codebase against the selected compliance packs."""
+    from privtrace.scan import run_scan
+
+    answers = _load_answers(answers_file, answer)
+    try:
+        result, _ = run_scan(target.resolve(), packs.split(","), answers, packs_dir=packs_dir)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    print_summary(result)
+    if out:
+        if out.suffix.lower() == ".json":
+            out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        else:
+            console.print("[yellow]HTML reports arrive in milestone 5; writing JSON instead.[/yellow]")
+            out = out.with_suffix(".json")
+            out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        console.print(f"Report written to {out}")
+
+
+@packs_app.command("legal-todo")
+def packs_legal_todo(
+    out: Path = typer.Option(Path("../docs/LEGAL_REVIEW_TODO.md"), help="Output markdown file."),
+    packs_dir: Path | None = typer.Option(None),
+) -> None:
+    """Regenerate docs/LEGAL_REVIEW_TODO.md from unverified pack references."""
+    from privtrace.packs.legal_todo import render_legal_todo
+
+    md = render_legal_todo(list(load_packs(packs_dir).values()))
+    out.write_text(md, encoding="utf-8")
+    console.print(f"wrote {out}")
 
 
 if __name__ == "__main__":  # pragma: no cover
