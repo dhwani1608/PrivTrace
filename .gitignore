@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Env / secrets
+.env
+!.env.example
+# demo-app intentionally commits a fake .env for the scanner to find
+!demo-app/.env
+
+# Node
+node_modules/
+frontend/dist/
+
+# PrivTrace outputs
+.privtrace/
+*.report.html
+reports/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
