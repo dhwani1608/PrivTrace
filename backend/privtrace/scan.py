@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 from privtrace import DISCLAIMER
@@ -30,6 +31,7 @@ def run_scan(
     baseline: ScanResult | None = None,
     fixes: bool = True,
     ai: AIGateway | None = None,
+    on_stage: Callable[[str], None] | None = None,
 ) -> tuple[ScanResult, CodeFacts]:
     """Scan `root` (already on local disk) against the selected packs."""
     all_packs = load_packs(packs_dir)
@@ -37,12 +39,16 @@ def run_scan(
     packs = [all_packs[i] for i in ids]
     answers = answers or {}
 
+    stage = on_stage or (lambda _name: None)
+    stage("analyzing")
     facts = facts or analyze_path(root, root_name=target_label or root.name)
+    stage("evaluating")
     results = evaluate(packs, facts, answers)
     if fixes:
         generate_fixes(results, packs, facts, root)  # needs the source, so before workspace cleanup
     ai_notes = []
     if ai is not None:
+        stage("explaining")
         before = [(r.rule_id, r.status) for r in results]
         ai_notes = ai.enrich(results, packs, facts, root)
         # Structural guarantee (AIEnrichment has no status) + belt-and-braces check.

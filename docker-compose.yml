@@ -22,6 +22,13 @@ services:
       timeout: 3s
       retries: 5
 
+  frontend:
+    build: ./frontend
+    ports:
+      - "${PRIVTRACE_UI_PORT:-5173}:80"
+    depends_on:
+      - api
+
   db:
     image: pgvector/pgvector:pg16
     environment:

@@ -174,7 +174,7 @@ def test_pii_names_positive(name, category):
     assert c is not None and c.category == category
 
 
-@pytest.mark.parametrize("name", ["file_name", "table_name", "model_name", "counter", "page", "usage", "url"])
+@pytest.mark.parametrize("name", ["file_name", "table_name", "model_name", "counter", "page", "usage", "url", "__name__"])
 def test_pii_names_negative(name):
     assert classify_name(name) is None
 

@@ -8,8 +8,8 @@
 
 ```bash
 cp .env.example .env            # optionally add GEMINI_API_KEY + GEMINI_MODEL
-docker compose up --build       # API on :8000
-curl http://localhost:8000/health
+docker compose up --build       # UI on http://localhost:5173, API on :8000
+open http://localhost:5173      # connect a repo -> pick frameworks -> checklist -> report
 ```
 
 ### Local development (no Docker)
@@ -20,7 +20,13 @@ python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 privtrace packs list
+privtrace scan ./some-repo --packs dpdp,security --out report.html --out report.json
+uvicorn privtrace.api.main:app --reload       # API for the UI
+
+cd ../frontend && npm install && npm run dev   # UI on :5173, proxies /api to :8000
 ```
+
+Ports clash? Set `PRIVTRACE_API_PORT` / `PRIVTRACE_UI_PORT` in `.env`.
 
 ## Build status
 
@@ -34,7 +40,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 4 | Rule engine, DPDP + Security packs, manual checklist, scoring | ✅ |
 | 5 | HTML/JSON reports, fix diffs, rescan diff, CLI output | ✅ |
 | 6 | Gemini: classification, explanations, fixes (structured output, redacted) | ✅ |
-| 7 | Frontend | ⏳ |
+| 7 | Scan API + React UI: connect → packs → checklist → progress → report | ✅ |
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ⏳ |
 | 9 | Demo app + fixed version + E2E | ⏳ |
 | 10 | Stretch: Verify (canary deletion test) | ⏳ |

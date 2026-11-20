@@ -30,3 +30,6 @@ reports/
 Thumbs.db
 .vscode/
 .idea/
+
+# TypeScript build info
+*.tsbuildinfo

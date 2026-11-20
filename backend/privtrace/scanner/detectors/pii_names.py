@@ -109,6 +109,8 @@ def tokenize(name: str) -> list[str]:
 
 def classify_name(name: str) -> NameClassification | None:
     """Return a classification, or None if the name doesn't look like personal data."""
+    if name.startswith("__") and name.endswith("__"):
+        return None  # dunders like __name__ are Python internals, not personal data
     tokens = tokenize(name)
     if not tokens:
         return None

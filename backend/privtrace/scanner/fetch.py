@@ -42,19 +42,24 @@ def clone_github(url: str, dest: Path, timeout: int = 120) -> Path:
         subprocess.run(
             ["git", "clone", "--depth", "1", "--single-branch", "--no-tags", url.strip(), str(target)],
             check=True, capture_output=True, timeout=timeout,
-            env={"GIT_TERMINAL_PROMPT": "0", "PATH": _path_env()},
+            env=_git_env(),
         )
     except subprocess.CalledProcessError as e:
-        raise FetchError(f"git clone failed: {e.stderr.decode(errors='replace')[:300]}") from e
+        msg = e.stderr.decode(errors="replace")
+        detail = "repository not found or not public" if "not found" in msg.lower() or "authentication" in msg.lower() else "could not reach GitHub"
+        raise FetchError(f"git clone failed: {detail}") from e
     except subprocess.TimeoutExpired as e:
         raise FetchError("git clone timed out") from e
     return target
 
 
-def _path_env() -> str:
+def _git_env() -> dict[str, str]:
+    """Inherit the environment (Windows needs SYSTEMROOT etc. for networking) but never prompt."""
     import os
 
-    return os.environ.get("PATH", "")
+    env = dict(os.environ)
+    env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo", "GCM_INTERACTIVE": "never"})
+    return env
 
 
 def extract_zip(zip_path: Path, dest: Path, max_bytes: int = 200 * 1024 * 1024) -> Path:
