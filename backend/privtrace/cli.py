@@ -197,6 +197,34 @@ def scan(
         raise typer.Exit(1)
 
 
+@app.command()
+def verify(
+    config: Path = typer.Option(..., exists=True, dir_okay=False, help="Verify config YAML (see demo/verify-*.yaml)."),
+    out: Path | None = typer.Option(None, help="Write the verify report as JSON."),
+) -> None:
+    """Runtime deletion test: create a canary user, delete it, search every store for leftovers.
+
+    Only run against a local or test deployment you own: it writes test data.
+    """
+    from privtrace.verify.canary import VerifyConfig, run_verify
+
+    cfg = VerifyConfig.load(config)
+    console.rule(f"PrivTrace verify · {cfg.name}")
+    report = run_verify(cfg)
+    if report.error:
+        console.print(f"[red]error:[/red] {escape(report.error)}")
+    t = Table("Store", "Before delete", "After delete", "Result", "Detail")
+    for r in report.results:
+        style = {"PASS": "green", "FAIL": "red"}.get(r.status, "yellow")
+        fmt = lambda v: "-" if v is None else ("found" if v else "absent")  # noqa: E731
+        t.add_row(r.store, fmt(r.found_before_delete), fmt(r.found_after_delete), f"[{style}]{r.status}[/{style}]", escape(r.detail))
+    console.print(t)
+    console.print(f"canary: {report.canary} · user id: {report.user_id}")
+    if out:
+        out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    raise typer.Exit(0 if report.passed else 1)
+
+
 @packs_app.command("legal-todo")
 def packs_legal_todo(
     out: Path = typer.Option(Path("../docs/LEGAL_REVIEW_TODO.md"), help="Output markdown file."),

@@ -1,0 +1,17 @@
+# privtrace verify --config demo/verify-demo-app.yaml   (all values are fake test data)
+name: demo-app
+base_url: http://localhost:9001
+signup:
+  path: /signup
+  json: {name: "Canary {canary}", email: "{canary}@example.com", phone: "+91 90000 00000", pan: "ABCPC0000C", password: "pw-{canary}"}
+  save: {user_id: id}
+activity:
+  - path: /chat
+    json: {user_id: "{user_id}", message: "remember my email {canary}@example.com"}
+delete:
+  method: DELETE
+  path: /users/{user_id}
+stores:
+  postgres: {dsn: "postgresql://demo:demo@localhost:55432/demo"}
+  redis: {url: "redis://localhost:56379/0"}
+  logs: {compose_file: demo/docker-compose.yml, service: demo-app}

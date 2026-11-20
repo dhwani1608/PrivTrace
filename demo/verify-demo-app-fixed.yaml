@@ -1,0 +1,17 @@
+name: demo-app-fixed
+base_url: http://localhost:9002
+headers: {Authorization: "Bearer demo-{user_id}"}
+signup:
+  path: /signup
+  json: {name: "Canary {canary}", email: "{canary}@example.com", phone: "+91 90000 00000", password: "pw-{canary}", consent_given: true, consent_notice_version: "v1"}
+  save: {user_id: id}
+activity:
+  - path: /chat
+    json: {message: "remember my email {canary}@example.com"}
+delete:
+  method: DELETE
+  path: /users/{user_id}
+stores:
+  postgres: {dsn: "postgresql://demo:demo@localhost:55433/demo"}
+  redis: {url: "redis://localhost:56380/0"}
+  logs: {compose_file: demo/docker-compose.yml, service: demo-app-fixed}

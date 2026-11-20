@@ -38,6 +38,25 @@ privtrace scan ../demo-app-fixed --packs dpdp,security --out fixed.html --baseli
 
 `demo-app` (a deliberately non-compliant FastAPI RAG chatbot) scores **6/100, risk Critical**: PII in Gemini prompts, request bodies logged, plaintext passwords, a delete endpoint that misses pgvector and Redis, a hardcoded key and more — each with file:line evidence and a suggested diff. `demo-app-fixed` scores **100/100 on automated checks, risk Low**, and the report lists what was fixed. Organisational checklist items stay "needs review" until answered.
 
+### Verify: prove deletion actually works (runtime)
+
+Static analysis says `DELETE /users/{id}` misses stores; **Verify** proves it. It signs up a fake user carrying a unique canary value, chats so the data spreads, calls the delete endpoint, then searches Postgres (incl. pgvector tables), Redis and the logs for the canary.
+
+```bash
+docker compose -f demo/docker-compose.yml up -d --build    # both demo apps, offline (no Gemini calls)
+cd backend
+privtrace verify --config ../demo/verify-demo-app.yaml        # FAIL: memories, redis profile, logs keep the canary
+privtrace verify --config ../demo/verify-demo-app-fixed.yaml  # PASS on every store
+```
+
+| Store | demo-app | demo-app-fixed |
+|---|---|---|
+| Postgres + pgvector | ❌ FAIL — `memories.content` still holds it | ✅ PASS |
+| Redis | ❌ FAIL — `profile:<id>` still cached | ✅ PASS |
+| Logs | ❌ FAIL — request bodies logged | ✅ PASS (never logged) |
+
+Only run Verify against local/test deployments you own: it writes test data.
+
 ## Build status
 
 Built milestone by milestone (see [PLAN.md](PLAN.md)).
@@ -53,7 +72,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 7 | Scan API + React UI: connect → packs → checklist → progress → report | ✅ |
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ✅ |
 | 9 | Demo app (score 6) + fixed version (score 100) + E2E test | ✅ |
-| 10 | Stretch: Verify (canary deletion test) | ⏳ |
+| 10 | Stretch: Verify (canary deletion test across Postgres/pgvector, Redis, logs) | ✅ |
 
 ## Repo layout
 
@@ -63,5 +82,6 @@ packs/               compliance packs (YAML data)
 frontend/            React + Vite + TS + Tailwind UI
 demo-app/            deliberately non-compliant RAG chatbot (fake data only)
 demo-app-fixed/      the same app with fixes applied
-docs/                architecture, scoring, legal review TODO, deploy guide
+demo/                docker-compose + Verify configs for the demo apps
+docs/                ARCHITECTURE, SCORING, LEGAL_REVIEW_TODO, DEPLOY_GCP, ADDING_A_PACK, DETECTION_LIMITS
 ```

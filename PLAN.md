@@ -1,6 +1,6 @@
 # PrivTrace — Build Plan
 
-Status: **approved 2026-11-20** — building phase by phase, pushing to https://github.com/dhwani1608/PrivTrace after each phase.
+Status: **all 10 milestones built (2026-11-20)** — built phase by phase, pushing to https://github.com/dhwani1608/PrivTrace after each phase.
 
 Decisions taken (defaults, change any time):
 - Git repo initialised inside `PrivTrace/` (not the home folder).

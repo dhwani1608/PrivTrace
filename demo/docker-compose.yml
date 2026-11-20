@@ -1,0 +1,36 @@
+# Runs both demo apps locally (offline: no Gemini calls) for `privtrace verify`.
+#   docker compose -f demo/docker-compose.yml up -d --build
+services:
+  db:                      # demo-app hardcodes host "db"
+    image: pgvector/pgvector:pg16
+    environment: {POSTGRES_USER: demo, POSTGRES_PASSWORD: demo, POSTGRES_DB: demo}
+    ports: ["55432:5432"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U demo"], interval: 3s, retries: 20}
+  redis:
+    image: redis:7-alpine
+    ports: ["56379:6379"]
+  demo-app:
+    build: ../demo-app
+    environment: {DEMO_OFFLINE: "1"}
+    ports: ["9001:8000"]
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_started}}
+
+  fixed-db:
+    image: pgvector/pgvector:pg16
+    environment: {POSTGRES_USER: demo, POSTGRES_PASSWORD: demo, POSTGRES_DB: demo}
+    ports: ["55433:5432"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U demo"], interval: 3s, retries: 20}
+  fixed-redis:
+    image: redis:7-alpine
+    ports: ["56380:6379"]
+  demo-app-fixed:
+    build: ../demo-app-fixed
+    environment:
+      DEMO_OFFLINE: "1"
+      DEMO_TOKENS: "1"
+      GEMINI_API_KEY: offline-demo-placeholder   # never used: DEMO_OFFLINE skips Gemini
+      DATABASE_URL: postgresql+psycopg://demo:demo@fixed-db:5432/demo
+      REDIS_URL: redis://fixed-redis:6379/0
+      ALLOWED_ORIGINS: http://localhost:5173
+    ports: ["9002:8000"]
+    depends_on: {fixed-db: {condition: service_healthy}, fixed-redis: {condition: service_started}}

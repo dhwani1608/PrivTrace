@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .auth import get_current_user
 from .cache import cache_profile, forget_profile
 from .config import ALLOWED_ORIGINS, APP_DEBUG
-from .db import Memory, User, get_db
+from .db import Base, Memory, User, engine, get_db
 from .llm import ask, embed
 from .logging_setup import configure_logging
 from .privacy import hash_password, redact_pii
@@ -21,6 +21,13 @@ logger = logging.getLogger("demo")
 
 app = FastAPI(debug=APP_DEBUG)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST", "DELETE"])
+
+
+@app.on_event("startup")
+def create_tables():
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    Base.metadata.create_all(engine)
 
 
 @app.middleware("http")
@@ -48,7 +55,7 @@ def chat(req: ChatRequest, user_id: int = Depends(get_current_user), db: Session
     message = redact_pii(req.message)
     vector = embed(message)
     rows = db.execute(
-        text("SELECT content FROM memories WHERE user_id = :uid ORDER BY embedding <-> :v LIMIT 3"),
+        text("SELECT content FROM memories WHERE user_id = :uid ORDER BY embedding <-> CAST(:v AS vector) LIMIT 3"),
         {"uid": user_id, "v": str(vector)},
     ).fetchall()
     context = "\n".join(r.content for r in rows)

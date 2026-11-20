@@ -11,3 +11,7 @@ See `PLAN.md` §1 for the diagram. Summary of the pipeline:
 7. **Score + report** — `report/` computes per-pack and overall scores (`docs/SCORING.md`), diffs against the previous scan, and renders JSON and HTML.
 
 The CLI, the API, and a future Cloud Run Job all call the same `run_scan()` function.
+
+## Verify (runtime deletion test)
+
+`verify/canary.py` complements the static erasure rule with a runtime check: create a canary user through the app's own API, exercise it, search each configured store (Postgres via `information_schema` text columns, Redis keys and values, log files or `docker compose logs`), call the delete endpoint, search again. A store passes when the canary is absent after deletion. Config is YAML (`demo/verify-*.yaml`), so it works for any HTTP app.
