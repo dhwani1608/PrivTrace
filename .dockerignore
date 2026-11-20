@@ -1,0 +1,11 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.privtrace
+frontend/dist
+.git
+demo
+demo-app
+demo-app-fixed
+.env

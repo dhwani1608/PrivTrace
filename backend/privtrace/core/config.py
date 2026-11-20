@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
     packs_dir: Path = Field(default_factory=_default_packs_dir, alias="PRIVTRACE_PACKS_DIR")
 
+    static_dir: Path | None = Field(default=None, alias="PRIVTRACE_STATIC_DIR")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
 

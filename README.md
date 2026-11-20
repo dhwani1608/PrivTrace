@@ -28,6 +28,17 @@ cd ../frontend && npm install && npm run dev   # UI on :5173, proxies /api to :8
 
 Ports clash? Set `PRIVTRACE_API_PORT` / `PRIVTRACE_UI_PORT` in `.env`.
 
+## Deploy (free, Render)
+
+The root `Dockerfile` builds one image that serves the React UI and the API on a single port.
+
+1. Sign in at [render.com](https://render.com) with GitHub.
+2. **New → Blueprint** → choose this repo. Render reads `render.yaml`.
+3. Optional: set `GEMINI_API_KEY` and `GEMINI_MODEL` in the service's Environment tab.
+4. Deploy. The app is at `https://<service-name>.onrender.com`.
+
+Free services sleep when idle (first request after that takes ~30–60 s) and scan history (SQLite in `/tmp`) resets on restart. Set `DATABASE_URL` to a Postgres URL to keep it.
+
 ## Demo
 
 ```bash

@@ -9,6 +9,7 @@ import uuid
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -202,6 +203,12 @@ def create_app(sessionmaker_: sessionmaker[Session] | None = None, run_inline: b
                 s.delete(rec)
                 s.commit()
         return Response(status_code=204)
+
+    # Single-container deploys (Render, HF Spaces): serve the built React UI from the same origin.
+    # Mounted last so every /api and /health route above takes precedence.
+    static_dir = settings.static_dir
+    if static_dir and static_dir.is_dir() and (static_dir / "index.html").exists():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="ui")
 
     return app
 

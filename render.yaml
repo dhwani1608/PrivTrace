@@ -1,0 +1,15 @@
+# Render Blueprint: New -> Blueprint -> pick this repo.
+services:
+  - type: web
+    name: privtrace
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Optional: enable Gemini explanations. Fill these in the Render dashboard.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
