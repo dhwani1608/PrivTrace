@@ -9,6 +9,8 @@ from privtrace import DISCLAIMER
 from privtrace.models.enums import ManualAnswerValue
 from privtrace.models.results import ScanResult, ScanSummary
 from privtrace.packs.loader import load_packs, resolve_pack_ids
+from privtrace.report.diff import diff_scans
+from privtrace.report.fixes import generate_fixes
 from privtrace.report.scoring import SCORING_FORMULA, overall_score, risk_level, score_pack
 from privtrace.rules.engine import evaluate
 from privtrace.scanner.analyze import analyze_path
@@ -24,6 +26,8 @@ def run_scan(
     target_label: str | None = None,
     packs_dir: Path | None = None,
     facts: CodeFacts | None = None,
+    baseline: ScanResult | None = None,
+    fixes: bool = True,
 ) -> tuple[ScanResult, CodeFacts]:
     """Scan `root` (already on local disk) against the selected packs."""
     all_packs = load_packs(packs_dir)
@@ -33,6 +37,8 @@ def run_scan(
 
     facts = facts or analyze_path(root, root_name=target_label or root.name)
     results = evaluate(packs, facts, answers)
+    if fixes:
+        generate_fixes(results, packs, facts, root)  # needs the source, so before workspace cleanup
     scores = [score_pack(p, results) for p in packs]
     graph = build_graph(facts.sinks)
 
@@ -57,4 +63,6 @@ def run_scan(
         scoring_formula=SCORING_FORMULA,
         disclaimer=DISCLAIMER,
     )
+    if baseline is not None:
+        result.diff = diff_scans(baseline, result)
     return result, facts

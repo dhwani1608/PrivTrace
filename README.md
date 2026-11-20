@@ -32,7 +32,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 2 | Detectors: PII names, Indian IDs (Verhoeff, Luhn, GSTIN), secrets, redaction | ✅ |
 | 3 | AST parsing, sinks, taint flow (cross-file), data-flow map | ✅ |
 | 4 | Rule engine, DPDP + Security packs, manual checklist, scoring | ✅ |
-| 5 | HTML/JSON reports, CLI output | ⏳ |
+| 5 | HTML/JSON reports, fix diffs, rescan diff, CLI output | ✅ |
 | 6 | Gemini: classification, explanations, fixes (redacted) | ⏳ |
 | 7 | Frontend | ⏳ |
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ⏳ |

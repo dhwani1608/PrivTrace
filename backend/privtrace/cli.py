@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from privtrace import __version__
@@ -109,6 +110,12 @@ def print_summary(result) -> None:
             f"{c.automated_checked}/{c.total} auto, {c.manual_answered} manual, {c.not_assessable} n/a",
         )
     console.print(t)
+    if result.diff:
+        d = result.diff
+        delta = d.get("overall_delta")
+        sign = "" if delta is None else (f"[green]{delta:+.1f}[/green]" if delta >= 0 else f"[red]{delta:+.1f}[/red]")
+        console.print(f"Since last scan: {d.get('overall_before')} → {d.get('overall_after')} {sign} · "
+                      f"fixed {len(d['fixed'])}, new failures {len(d['regressed'])}")
     failed = [r for r in result.results if r.status == RuleStatus.failed]
     failed.sort(key=lambda r: -r.severity.rank)
     for r in failed:
@@ -123,33 +130,62 @@ def print_summary(result) -> None:
     console.print(f"[dim]{result.disclaimer}[/dim]")
 
 
+def _history_path(target: Path) -> Path:
+    import hashlib
+
+    key = hashlib.sha1(str(target.resolve()).encode()).hexdigest()[:10]
+    return Path.cwd() / ".privtrace" / f"last-{target.resolve().name}-{key}.json"
+
+
+def write_report(result, out: Path) -> Path:
+    from privtrace.report.html_report import write_html
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.suffix.lower() == ".json":
+        out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        return out
+    return write_html(result, out if out.suffix.lower() in (".html", ".htm") else out.with_suffix(".html"))
+
+
 @app.command()
 def scan(
     target: Path = typer.Argument(..., exists=True, file_okay=False, help="Local folder to scan."),
     packs: str = typer.Option("dpdp,security", help="Comma-separated pack ids or aliases."),
-    out: Path | None = typer.Option(None, help="Write report (.html or .json)."),
+    out: list[Path] = typer.Option([], "--out", help="Report file(s): .html and/or .json (repeatable)."),
     answers_file: Path | None = typer.Option(None, "--answers", help="JSON file {rule_id: yes|no|not_sure}."),
     answer: list[str] = typer.Option([], "--answer", help="RULE_ID=yes|no|not_sure (repeatable)."),
+    baseline: Path | None = typer.Option(None, help="Previous JSON report to diff against."),
+    history: bool = typer.Option(True, help="Diff against, and save, the last scan of this folder (.privtrace/)."),
     packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+    fail_under: float | None = typer.Option(None, help="Exit 1 if the overall score is below this (CI)."),
 ) -> None:
     """Scan a local codebase against the selected compliance packs."""
+    from privtrace.models.results import ScanResult
     from privtrace.scan import run_scan
 
     answers = _load_answers(answers_file, answer)
+    prev = None
+    hist = _history_path(target)
+    if baseline:
+        prev = ScanResult.model_validate_json(baseline.read_text(encoding="utf-8"))
+    elif history and hist.exists():
+        try:
+            prev = ScanResult.model_validate_json(hist.read_text(encoding="utf-8"))
+        except ValueError:
+            prev = None
     try:
-        result, _ = run_scan(target.resolve(), packs.split(","), answers, packs_dir=packs_dir)
+        result, _ = run_scan(target.resolve(), packs.split(","), answers, packs_dir=packs_dir, baseline=prev)
     except PackLoadError as e:
         console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
     print_summary(result)
-    if out:
-        if out.suffix.lower() == ".json":
-            out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
-        else:
-            console.print("[yellow]HTML reports arrive in milestone 5; writing JSON instead.[/yellow]")
-            out = out.with_suffix(".json")
-            out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
-        console.print(f"Report written to {out}")
+    for o in out:
+        console.print(f"Report written to {write_report(result, o)}")
+    if history:
+        hist.parent.mkdir(parents=True, exist_ok=True)
+        hist.write_text(result.model_dump_json(), encoding="utf-8")
+    if fail_under is not None and (result.overall_score or 0) < fail_under:
+        raise typer.Exit(1)
 
 
 @packs_app.command("legal-todo")
