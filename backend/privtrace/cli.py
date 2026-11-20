@@ -52,6 +52,22 @@ def packs_list(
 
 
 @app.command()
+def facts(
+    target: Path = typer.Argument(..., exists=True, file_okay=False, help="Local folder."),
+    out: Path | None = typer.Option(None, help="Write facts JSON here instead of stdout."),
+) -> None:
+    """Debug: dump the raw scanner facts (models, sinks, flows, config) as JSON."""
+    from privtrace.scanner.analyze import analyze_path
+
+    data = analyze_path(target.resolve()).model_dump_json(indent=2)
+    if out:
+        out.write_text(data, encoding="utf-8")
+        console.print(f"wrote {out}")
+    else:
+        typer.echo(data)
+
+
+@app.command()
 def scan(
     target: Path = typer.Argument(..., help="Local folder to scan."),
     packs: str = typer.Option("dpdp,security", help="Comma-separated pack ids or aliases."),
