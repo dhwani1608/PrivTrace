@@ -98,6 +98,7 @@ def is_dynamic_string(node: ast.AST) -> bool:
     return False
 
 
+_NON_PII_ATTR = re.compile(r"^(id|pk|uuid|guid|\w+_id|\w+_at|created|updated|count|status|state|type|kind|version|is_\w+|has_\w+)$")
 _SQL_KEYWORD = re.compile(r"\b(select|insert|update|delete|where|from)\b", re.I)
 
 
@@ -279,7 +280,11 @@ class FunctionAnalyzer:
             if own:
                 params = frozenset(t for t in base[0] if t.category == PARAM)
                 return (own | params, base[1])
-            return base
+            # `user.id` / `row.created_at` are keys and metadata, not the object's personal data.
+            if _NON_PII_ATTR.match(e.attr):
+                return (frozenset(t for t in base[0] if t.category == PARAM), base[1])
+            # Other attributes of a model object don't carry every model field ("Model.field").
+            return (frozenset(t for t in base[0] if "." not in t.name), base[1])
         if isinstance(e, ast.Subscript):
             key = e.slice
             base = self.eval(e.value)

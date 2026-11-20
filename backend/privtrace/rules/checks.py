@@ -74,7 +74,11 @@ def _flag_sinks(facts: CodeFacts, kinds: tuple[SinkKind, ...], none_msg: str, cl
            and (categories is None or {t.category for t in s.taints} & categories)]
     if not bad:
         return _outcome(RuleStatus.passed, clean_msg)
-    return _outcome(hit_status, hit_msg.format(n=len(bad)), (_sink_ev(s) for s in bad))
+    return _outcome(hit_status, hit_msg.format(n=_n_locations(bad)), (_sink_ev(s) for s in bad))
+
+
+def _n_locations(sinks: list[SinkEvent]) -> int:
+    return len({(s.location.file, s.location.line) for s in sinks})
 
 
 # =========================================================================
@@ -138,7 +142,7 @@ def sensitive_data_unprotected_at_rest(facts: CodeFacts, params: dict) -> CheckO
     if not sinks:
         return _outcome(RuleStatus.passed, "No sensitive personal data (IDs, financial, health, biometric) written to stores without encryption/masking.")
     return _outcome(RuleStatus(params.get("hit_status", "needs_review")),
-                    f"{len(sinks)} write(s) store sensitive identifiers/financial data with no encryption or masking step in code. "
+                    f"{_n_locations(sinks)} write(s) store sensitive identifiers/financial data with no encryption or masking step in code. "
                     "Column- or disk-level encryption may exist outside the code.",
                     (_sink_ev(s) for s in sinks))
 
@@ -186,7 +190,7 @@ def cache_pii_without_ttl(facts: CodeFacts, params: dict) -> CheckOutcome:
     bad = [s for s in caches if not s.has_ttl]
     if not bad:
         return _outcome(RuleStatus.passed, "Every cache write holding personal data sets a TTL.")
-    return _outcome(RuleStatus.failed, f"{len(bad)} cache write(s) store personal data with no expiry (TTL).", (_sink_ev(s) for s in bad))
+    return _outcome(RuleStatus.failed, f"{_n_locations(bad)} cache write(s) store personal data with no expiry (TTL).", (_sink_ev(s) for s in bad))
 
 
 @register_check("retention_mechanism_present")
@@ -214,7 +218,7 @@ def plaintext_passwords(facts: CodeFacts, params: dict) -> CheckOutcome:
         evs = [_sink_ev(s) for s in stores] + [_cfg_ev(c) for c in weak]
         parts = []
         if stores:
-            parts.append(f"{len(stores)} place(s) store or log passwords without hashing")
+            parts.append(f"{_n_locations(stores)} place(s) store or log passwords without hashing")
         if weak:
             parts.append(f"{len(weak)} use(s) of a fast hash (MD5/SHA) for passwords")
         return _outcome(RuleStatus.failed, "; ".join(parts) + ".", evs)

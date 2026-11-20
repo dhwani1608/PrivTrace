@@ -28,6 +28,16 @@ cd ../frontend && npm install && npm run dev   # UI on :5173, proxies /api to :8
 
 Ports clash? Set `PRIVTRACE_API_PORT` / `PRIVTRACE_UI_PORT` in `.env`.
 
+## Demo
+
+```bash
+cd backend
+privtrace scan ../demo-app       --packs dpdp,security --out demo.html  --out demo.json
+privtrace scan ../demo-app-fixed --packs dpdp,security --out fixed.html --baseline demo.json
+```
+
+`demo-app` (a deliberately non-compliant FastAPI RAG chatbot) scores **6/100, risk Critical**: PII in Gemini prompts, request bodies logged, plaintext passwords, a delete endpoint that misses pgvector and Redis, a hardcoded key and more — each with file:line evidence and a suggested diff. `demo-app-fixed` scores **100/100 on automated checks, risk Low**, and the report lists what was fixed. Organisational checklist items stay "needs review" until answered.
+
 ## Build status
 
 Built milestone by milestone (see [PLAN.md](PLAN.md)).
@@ -42,7 +52,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 6 | Gemini: classification, explanations, fixes (structured output, redacted) | ✅ |
 | 7 | Scan API + React UI: connect → packs → checklist → progress → report | ✅ |
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ✅ |
-| 9 | Demo app + fixed version + E2E | ⏳ |
+| 9 | Demo app (score 6) + fixed version (score 100) + E2E test | ✅ |
 | 10 | Stretch: Verify (canary deletion test) | ⏳ |
 
 ## Repo layout
