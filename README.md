@@ -41,7 +41,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 5 | HTML/JSON reports, fix diffs, rescan diff, CLI output | ✅ |
 | 6 | Gemini: classification, explanations, fixes (structured output, redacted) | ✅ |
 | 7 | Scan API + React UI: connect → packs → checklist → progress → report | ✅ |
-| 8 | IT Act/SPDI, CERT-In, GDPR packs | ⏳ |
+| 8 | IT Act/SPDI, CERT-In, GDPR packs | ✅ |
 | 9 | Demo app + fixed version + E2E | ⏳ |
 | 10 | Stretch: Verify (canary deletion test) | ⏳ |
 

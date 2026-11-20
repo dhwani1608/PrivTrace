@@ -1,0 +1,113 @@
+# CERT-In Directions under section 70B(6) of the IT Act, 2000, dated 28 April 2022 (India).
+# Direction numbers are unverified until checked against the official text.
+id: certin-2022
+name: CERT-In Directions (28 April 2022)
+short_name: CERT-In
+jurisdiction: IN
+version: "2022-04"
+source_url: https://www.cert-in.org.in/
+description: >
+  Cyber-security directions for service providers, intermediaries, data centres and body
+  corporates: clock synchronisation, 6-hour incident reporting, a point of contact,
+  180-day log retention within India, and record-keeping for some providers.
+
+rules:
+  - id: CERTIN-LOG-01
+    title: Logging of ICT systems enabled
+    reference: "CERT-In Directions dated 28.04.2022 under IT Act s.70B(6), direction (iv) (maintain logs of ICT systems)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: high
+    check_type: hybrid
+    detector: logging_configured
+    question: Are logs of all your ICT systems (application, server, network, cloud) enabled and maintained securely?
+    why_it_matters: Without logs you cannot investigate or report an incident.
+    remediation: Configure structured application logging and ship logs to a central, access-controlled store.
+    tags: [logging]
+
+  - id: CERTIN-LOG-02
+    title: Logs retained for at least 180 days
+    reference: "CERT-In Directions dated 28.04.2022, direction (iv) (rolling period of 180 days)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: high
+    check_type: hybrid
+    detector: log_retention_min_days
+    detector_params: {min_days: 180}
+    question: Are logs retained for a rolling period of at least 180 days?
+    why_it_matters: The directions require a 180-day rolling log window to support incident investigation.
+    remediation: Set log retention to at least 180 days (e.g. Cloud Logging bucket retention, rotation backupCount).
+    tags: [logging, retention]
+
+  - id: CERTIN-LOG-03
+    title: Logs stored within Indian jurisdiction
+    reference: "CERT-In Directions dated 28.04.2022, direction (iv) (logs maintained within Indian jurisdiction)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: high
+    check_type: manual
+    question: Are the 180 days of logs stored within India (e.g. an India cloud region)?
+    why_it_matters: The directions require logs to be maintained within Indian jurisdiction.
+    remediation: Route log storage to an India region (e.g. asia-south1 / asia-south2 on Google Cloud).
+    tags: [logging, localisation]
+
+  - id: CERTIN-TIME-01
+    title: System clocks synchronised to NIC / NPL NTP servers
+    reference: "CERT-In Directions dated 28.04.2022, direction (i) (synchronise clocks to NTP servers of NIC or NPL)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: medium
+    check_type: hybrid
+    detector: time_sync_configured
+    question: Are all system clocks synchronised to NTP servers of NIC or NPL, or to servers traceable to them?
+    why_it_matters: Consistent timestamps across systems are essential to reconstruct an incident timeline.
+    remediation: Configure NTP (chrony/timesyncd) to NIC/NPL servers or a provider time service traceable to them.
+    tags: [time]
+
+  - id: CERTIN-INC-01
+    title: Cyber incidents reported to CERT-In within 6 hours
+    reference: "CERT-In Directions dated 28.04.2022, direction (ii) (report within 6 hours of noticing)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: critical
+    check_type: manual
+    question: Do you have a process to report the listed cyber incidents to CERT-In within 6 hours of noticing them?
+    why_it_matters: The 6-hour window is short; without a rehearsed process it will be missed.
+    remediation: Add CERT-In reporting (contacts, templates, owners) to your incident runbook and rehearse it.
+    tags: [incident]
+
+  - id: CERTIN-INC-02
+    title: Logs capture the incident types CERT-In lists
+    reference: "CERT-In Directions dated 28.04.2022, Annexure I (types of cyber security incidents)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: medium
+    check_type: manual
+    question: Do your logs and alerts capture the incident types listed in the directions (e.g. unauthorised access, data breaches, attacks on applications)?
+    why_it_matters: You can only report incidents you can detect.
+    remediation: Map Annexure I incident types to log events and alerts.
+    tags: [incident, logging]
+
+  - id: CERTIN-POC-01
+    title: Point of contact designated for CERT-In
+    reference: "CERT-In Directions dated 28.04.2022, direction (iii) (designate a Point of Contact)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: medium
+    check_type: manual
+    question: Have you designated a Point of Contact to interface with CERT-In and shared their details?
+    why_it_matters: CERT-In needs a named contact to send requests and directions to.
+    remediation: Designate a PoC and submit their details in the format CERT-In specifies.
+    tags: [governance]
+
+  - id: CERTIN-REC-01
+    title: Subscriber / customer records kept (data centres, VPS, cloud, VPN providers)
+    reference: "CERT-In Directions dated 28.04.2022, direction (v) (records for 5 years, where applicable)"
+    reference_verified: false
+    source_url: https://www.cert-in.org.in/
+    severity: medium
+    check_type: manual
+    question: If you provide data centre, VPS, cloud or VPN services, do you keep the required subscriber records for 5 years? (Answer "yes" if this does not apply to you.)
+    why_it_matters: Certain providers must retain validated subscriber information.
+    remediation: Confirm applicability; if applicable, implement the required record-keeping and retention.
+    tags: [records]

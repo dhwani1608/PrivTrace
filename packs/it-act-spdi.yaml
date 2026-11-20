@@ -1,0 +1,174 @@
+# Information Technology Act, 2000 s.43A + IT (Reasonable Security Practices and Procedures
+# and Sensitive Personal Data or Information) Rules, 2011 ("SPDI Rules"), India.
+# All references unverified until checked against the official text (docs/LEGAL_REVIEW_TODO.md).
+id: it-act-spdi
+name: IT Act 2000 s.43A + SPDI Rules 2011
+short_name: IT Act/SPDI
+jurisdiction: IN
+version: "2011-04"
+source_url: https://www.meity.gov.in/
+description: >
+  Compensation for failure to protect sensitive personal data (s.43A) and the SPDI Rules:
+  what counts as sensitive data (passwords, financial, health, biometric), consent and
+  purpose at collection, disclosure, privacy policy, grievance officer and reasonable
+  security practices.
+
+rules:
+  - id: ITA-SEC-01
+    title: Passwords (sensitive personal data) stored without hashing
+    reference: "SPDI Rules 2011, Rule 3 (passwords are sensitive personal data) and Rule 8 (reasonable security practices); IT Act 2000, s.43A"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: critical
+    check_type: automated
+    detector: plaintext_passwords
+    why_it_matters: Passwords are sensitive personal data under the SPDI Rules; storing them in plaintext is not a reasonable security practice.
+    remediation: Hash passwords with bcrypt or argon2 and never log them.
+    tags: [credentials, security]
+
+  - id: ITA-SEC-02
+    title: Financial / ID data stored without encryption or masking
+    reference: "SPDI Rules 2011, Rule 3 (financial information) and Rule 8"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: automated
+    detector: sensitive_data_unprotected_at_rest
+    why_it_matters: Bank, card and payment details are sensitive personal data and need stronger protection.
+    remediation: Encrypt or tokenise financial identifiers; store masked values where full ones aren't required.
+    tags: [security, encryption]
+
+  - id: ITA-SEC-03
+    title: Hardcoded credentials protecting data systems
+    reference: "SPDI Rules 2011, Rule 8 (reasonable security practices); IT Act 2000, s.43A"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: automated
+    detector: hardcoded_secrets
+    why_it_matters: Keys in source code give anyone with repo access a route to the data.
+    remediation: Move secrets to a secret manager and rotate exposed keys.
+    tags: [secrets]
+
+  - id: ITA-SEC-04
+    title: Data sent over plain HTTP or with TLS verification off
+    reference: "SPDI Rules 2011, Rule 8 (reasonable security practices)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: automated
+    detector: insecure_transport
+    why_it_matters: Unencrypted transport exposes data to interception.
+    remediation: Use HTTPS everywhere and keep certificate verification enabled.
+    tags: [transport]
+
+  - id: ITA-SEC-05
+    title: Personal data written to logs
+    reference: "SPDI Rules 2011, Rule 8 (reasonable security practices)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: medium
+    check_type: automated
+    detector: pii_in_logs
+    why_it_matters: Logs are broadly accessible and long-lived.
+    remediation: Log identifiers rather than values; add a redacting log filter.
+    tags: [logging]
+
+  - id: ITA-DIS-01
+    title: Sensitive data disclosed to third parties
+    reference: "SPDI Rules 2011, Rule 6 (disclosure requires prior permission of the provider)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: automated
+    detector: pii_to_third_party
+    detector_params: {hit_status: needs_review}
+    why_it_matters: Disclosure of sensitive data to a third party generally needs the person's prior permission or a contract.
+    remediation: Confirm permission/contract for each recipient and send only what is needed.
+    tags: [third-party]
+
+  - id: ITA-DIS-02
+    title: Personal data sent to an AI provider without redaction
+    reference: "SPDI Rules 2011, Rule 6 (disclosure) and Rule 8 (security)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: automated
+    detector: pii_to_llm_unredacted
+    why_it_matters: An LLM API is a third party; prompts may be retained outside your control.
+    remediation: Redact identifiers before prompting.
+    tags: [ai, third-party]
+
+  - id: ITA-COL-01
+    title: Consent recorded when collecting sensitive data
+    reference: "SPDI Rules 2011, Rule 5(1) (consent in writing regarding purpose of usage)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: hybrid
+    detector: consent_captured_at_collection
+    question: Do you obtain written (including electronic) consent stating the purpose before collecting sensitive personal data?
+    why_it_matters: Collection of sensitive data requires consent tied to a stated purpose.
+    remediation: Capture and store consent (purpose, timestamp, policy version) with the record.
+    tags: [consent]
+
+  - id: ITA-COL-02
+    title: Sensitive data collected — confirm it is necessary
+    reference: "SPDI Rules 2011, Rule 5(2) (collect only for a lawful purpose and where necessary)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: medium
+    check_type: automated
+    detector: minimisation_sensitive_fields
+    why_it_matters: Collecting sensitive data that isn't necessary increases exposure.
+    remediation: Remove fields not needed for the stated purpose.
+    tags: [minimisation]
+
+  - id: ITA-RET-01
+    title: Sensitive data kept no longer than required
+    reference: "SPDI Rules 2011, Rule 5(4) (retain no longer than required for the purpose)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: medium
+    check_type: hybrid
+    detector: retention_mechanism_present
+    question: Do you delete sensitive personal data once the purpose it was collected for is complete (unless another law requires keeping it)?
+    why_it_matters: Indefinite retention increases the damage of any breach.
+    remediation: Define retention periods and a purge job.
+    tags: [retention]
+
+  - id: ITA-POL-01
+    title: Privacy policy published
+    reference: "SPDI Rules 2011, Rule 4 (privacy policy)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: manual
+    question: Is a privacy policy covering the types of data collected, purpose, disclosure and security practices published and easily accessible?
+    why_it_matters: Users must be able to see how their sensitive data is handled.
+    remediation: Publish a privacy policy on the website/app and link it at every collection point.
+    tags: [notice]
+
+  - id: ITA-GRV-01
+    title: Grievance Officer designated
+    reference: "SPDI Rules 2011, Rule 5(9) (Grievance Officer)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: medium
+    check_type: manual
+    question: Have you designated a Grievance Officer and published their name and contact details?
+    why_it_matters: Users need a named contact to raise complaints about their data.
+    remediation: Designate a Grievance Officer and publish their details on the website.
+    tags: [governance]
+
+  - id: ITA-ISO-01
+    title: Documented information security programme
+    reference: "SPDI Rules 2011, Rule 8 (IS/ISO/IEC 27001 or an approved code of best practices)"
+    reference_verified: false
+    source_url: https://www.meity.gov.in/
+    severity: high
+    check_type: manual
+    question: Do you have a documented information security programme (e.g. ISO/IEC 27001) that is audited periodically?
+    why_it_matters: The rules treat a documented, audited security programme as evidence of reasonable security practices.
+    remediation: Adopt ISO/IEC 27001 (or an approved code), document controls and schedule audits.
+    tags: [governance, security]

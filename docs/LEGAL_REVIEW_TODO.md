@@ -14,6 +14,19 @@ Also open:
   deep links to the exact notified text once confirmed.
 
 
+## CERT-In Directions (28 April 2022) (`certin-2022`)
+
+| Rule | Title | Reference to verify | Source |
+|---|---|---|---|
+| `CERTIN-LOG-01` | Logging of ICT systems enabled | CERT-In Directions dated 28.04.2022 under IT Act s.70B(6), direction (iv) (maintain logs of ICT systems) | <https://www.cert-in.org.in/> |
+| `CERTIN-LOG-02` | Logs retained for at least 180 days | CERT-In Directions dated 28.04.2022, direction (iv) (rolling period of 180 days) | <https://www.cert-in.org.in/> |
+| `CERTIN-LOG-03` | Logs stored within Indian jurisdiction | CERT-In Directions dated 28.04.2022, direction (iv) (logs maintained within Indian jurisdiction) | <https://www.cert-in.org.in/> |
+| `CERTIN-TIME-01` | System clocks synchronised to NIC / NPL NTP servers | CERT-In Directions dated 28.04.2022, direction (i) (synchronise clocks to NTP servers of NIC or NPL) | <https://www.cert-in.org.in/> |
+| `CERTIN-INC-01` | Cyber incidents reported to CERT-In within 6 hours | CERT-In Directions dated 28.04.2022, direction (ii) (report within 6 hours of noticing) | <https://www.cert-in.org.in/> |
+| `CERTIN-INC-02` | Logs capture the incident types CERT-In lists | CERT-In Directions dated 28.04.2022, Annexure I (types of cyber security incidents) | <https://www.cert-in.org.in/> |
+| `CERTIN-POC-01` | Point of contact designated for CERT-In | CERT-In Directions dated 28.04.2022, direction (iii) (designate a Point of Contact) | <https://www.cert-in.org.in/> |
+| `CERTIN-REC-01` | Subscriber / customer records kept (data centres, VPS, cloud, VPN providers) | CERT-In Directions dated 28.04.2022, direction (v) (records for 5 years, where applicable) | <https://www.cert-in.org.in/> |
+
 ## Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025 (`dpdp-2023`)
 
 | Rule | Title | Reference to verify | Source |
@@ -34,10 +47,28 @@ Also open:
 | `DPDP-GRV-01` | Contact person and grievance redressal published | DPDP Act 2023, s.8(9) (contact details), s.8(10) and s.13 (grievance redressal) | <https://www.meity.gov.in/data-protection-framework> |
 | `DPDP-XB-01` | Cross-border transfer of personal data | DPDP Act 2023, s.16 (processing outside India) | <https://www.meity.gov.in/data-protection-framework> |
 
+## IT Act 2000 s.43A + SPDI Rules 2011 (`it-act-spdi`)
+
+| Rule | Title | Reference to verify | Source |
+|---|---|---|---|
+| `ITA-SEC-01` | Passwords (sensitive personal data) stored without hashing | SPDI Rules 2011, Rule 3 (passwords are sensitive personal data) and Rule 8 (reasonable security practices); IT Act 2000, s.43A | <https://www.meity.gov.in/> |
+| `ITA-SEC-02` | Financial / ID data stored without encryption or masking | SPDI Rules 2011, Rule 3 (financial information) and Rule 8 | <https://www.meity.gov.in/> |
+| `ITA-SEC-03` | Hardcoded credentials protecting data systems | SPDI Rules 2011, Rule 8 (reasonable security practices); IT Act 2000, s.43A | <https://www.meity.gov.in/> |
+| `ITA-SEC-04` | Data sent over plain HTTP or with TLS verification off | SPDI Rules 2011, Rule 8 (reasonable security practices) | <https://www.meity.gov.in/> |
+| `ITA-SEC-05` | Personal data written to logs | SPDI Rules 2011, Rule 8 (reasonable security practices) | <https://www.meity.gov.in/> |
+| `ITA-DIS-01` | Sensitive data disclosed to third parties | SPDI Rules 2011, Rule 6 (disclosure requires prior permission of the provider) | <https://www.meity.gov.in/> |
+| `ITA-DIS-02` | Personal data sent to an AI provider without redaction | SPDI Rules 2011, Rule 6 (disclosure) and Rule 8 (security) | <https://www.meity.gov.in/> |
+| `ITA-COL-01` | Consent recorded when collecting sensitive data | SPDI Rules 2011, Rule 5(1) (consent in writing regarding purpose of usage) | <https://www.meity.gov.in/> |
+| `ITA-COL-02` | Sensitive data collected — confirm it is necessary | SPDI Rules 2011, Rule 5(2) (collect only for a lawful purpose and where necessary) | <https://www.meity.gov.in/> |
+| `ITA-RET-01` | Sensitive data kept no longer than required | SPDI Rules 2011, Rule 5(4) (retain no longer than required for the purpose) | <https://www.meity.gov.in/> |
+| `ITA-POL-01` | Privacy policy published | SPDI Rules 2011, Rule 4 (privacy policy) | <https://www.meity.gov.in/> |
+| `ITA-GRV-01` | Grievance Officer designated | SPDI Rules 2011, Rule 5(9) (Grievance Officer) | <https://www.meity.gov.in/> |
+| `ITA-ISO-01` | Documented information security programme | SPDI Rules 2011, Rule 8 (IS/ISO/IEC 27001 or an approved code of best practices) | <https://www.meity.gov.in/> |
+
 ## Security baseline (OWASP-style) (`security-baseline`)
 
 | Rule | Title | Reference to verify | Source |
 |---|---|---|---|
 | `SECB-LLM-01` | Sensitive information disclosed to an LLM | OWASP Top 10 for LLM Applications 2025, LLM02 Sensitive Information Disclosure | <https://genai.owasp.org/llm-top-10/> |
 
-**16 reference(s) awaiting verification.**
+**37 reference(s) awaiting verification.**

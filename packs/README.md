@@ -2,13 +2,15 @@
 
 Each `*.yaml` file in this folder is one framework. Packs are **data, not code**: the engine loads them at runtime and validates them against `backend/privtrace/packs/schema.py`. See `docs/ADDING_A_PACK.md` for the full schema.
 
-| File | Framework | Status |
+| File | Framework | Rules (auto / hybrid / manual) |
 |---|---|---|
-| `dpdp-2023.yaml` | Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025 (India) | planned, milestone 4 |
-| `security-baseline.yaml` | OWASP-style security baseline | planned, milestone 4 |
-| `it-act-spdi.yaml` | IT Act 2000 s.43A + SPDI Rules 2011 (India) | planned, milestone 8 |
-| `certin-2022.yaml` | CERT-In Directions, 28 April 2022 (India) | planned, milestone 8 |
-| `gdpr-subset.yaml` | GDPR (EU), code-relevant subset | planned, milestone 8 |
+| `dpdp-2023.yaml` | Digital Personal Data Protection Act, 2023 + DPDP Rules, 2025 (India) | 8 / 3 / 4 |
+| `it-act-spdi.yaml` | IT Act 2000 s.43A + SPDI Rules 2011 (India) | 8 / 2 / 3 |
+| `certin-2022.yaml` | CERT-In Directions, 28 April 2022 (India) | 0 / 3 / 5 |
+| `gdpr-subset.yaml` | GDPR (EU), code-relevant subset | 7 / 2 / 5 |
+| `security-baseline.yaml` | OWASP-style security baseline | 11 / 0 / 2 |
+
+CLI aliases: `dpdp`, `it`, `certin`, `gdpr`, `security`.
 
 ## Placeholder: "TAD"
 

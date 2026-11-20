@@ -335,3 +335,26 @@ def test_overall_is_weighted_and_handles_empty():
     assert overall_score([a, b]) == round(100 * 10 / 11, 1)
     assert overall_score([score_pack(_pack(), [_rr("A-B-1", R, Severity.low)])]) is None
     assert risk_level([]) == RiskLevel.low
+
+
+def test_all_five_packs_run_with_aliases(tmp_path):
+    from privtrace.packs.loader import resolve_pack_ids
+    from privtrace.scan import run_scan
+
+    packs = load_packs()
+    ids = resolve_pack_ids(["dpdp", "it", "certin", "gdpr", "security"], packs)
+    assert ids == ["dpdp-2023", "it-act-spdi", "certin-2022", "gdpr-subset", "security-baseline"]
+    d = tmp_path / "app"
+    d.mkdir()
+    (d / "app.py").write_text(
+        "import logging\nfrom logging.handlers import TimedRotatingFileHandler\n"
+        "h = TimedRotatingFileHandler('a.log', when='D', backupCount=30)\n"
+        "log = logging.getLogger(__name__)\n"
+        "def f(email):\n    log.info(email)\n", encoding="utf-8")
+    result, _ = run_scan(d, ids)
+    by = {(r.pack_id, r.rule_id): r for r in result.results}
+    assert by[("certin-2022", "CERTIN-LOG-02")].status == F       # 30 < 180 days
+    assert by[("certin-2022", "CERTIN-LOG-01")].status == P       # logging configured
+    assert by[("gdpr-subset", "GDPR-SEC-02")].status == F
+    assert by[("it-act-spdi", "ITA-SEC-05")].status == F
+    assert len(result.pack_scores) == 5
