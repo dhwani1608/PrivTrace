@@ -33,7 +33,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 3 | AST parsing, sinks, taint flow (cross-file), data-flow map | ✅ |
 | 4 | Rule engine, DPDP + Security packs, manual checklist, scoring | ✅ |
 | 5 | HTML/JSON reports, fix diffs, rescan diff, CLI output | ✅ |
-| 6 | Gemini: classification, explanations, fixes (redacted) | ⏳ |
+| 6 | Gemini: classification, explanations, fixes (structured output, redacted) | ✅ |
 | 7 | Frontend | ⏳ |
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ⏳ |
 | 9 | Demo app + fixed version + E2E | ⏳ |

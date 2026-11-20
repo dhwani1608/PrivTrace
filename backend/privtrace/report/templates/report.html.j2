@@ -138,6 +138,16 @@
     <p class="muted">Where personal data enters the code, which functions carry it, and which stores or third parties it reaches. Hover an edge for file:line.</p>
     <div class="legend"><span><i style="background:var(--red)"></i>risky (unredacted to AI / logs / third parties / sensitive data)</span><span><i style="background:#94a3b8"></i>other flow</span></div>
     {{ flow }}
+    {% if r.ai_classifications %}
+    <h3>Possible personal data in generic fields <span class="ai-label">AI-classified — review</span></h3>
+    <p class="muted">These generically named fields were classified by AI as likely holding personal data. They do not change any rule result.</p>
+    <table>
+      <tr><th>Field</th><th>Category</th><th>Where</th><th>Why</th></tr>
+      {% for c in r.ai_classifications %}
+      <tr><td><code>{{ c.name }}</code></td><td>{{ c.category }}</td><td>{% if c.file %}<code>{{ c.file }}:{{ c.line }}</code>{% endif %}</td><td>{{ c.reason }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
   </section>
 
   <!-- 3. Findings -->

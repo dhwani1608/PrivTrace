@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from privtrace import DISCLAIMER
+from privtrace.ai.gateway import AIGateway
 from privtrace.models.enums import ManualAnswerValue
 from privtrace.models.results import ScanResult, ScanSummary
 from privtrace.packs.loader import load_packs, resolve_pack_ids
@@ -28,6 +29,7 @@ def run_scan(
     facts: CodeFacts | None = None,
     baseline: ScanResult | None = None,
     fixes: bool = True,
+    ai: AIGateway | None = None,
 ) -> tuple[ScanResult, CodeFacts]:
     """Scan `root` (already on local disk) against the selected packs."""
     all_packs = load_packs(packs_dir)
@@ -39,6 +41,13 @@ def run_scan(
     results = evaluate(packs, facts, answers)
     if fixes:
         generate_fixes(results, packs, facts, root)  # needs the source, so before workspace cleanup
+    ai_notes = []
+    if ai is not None:
+        before = [(r.rule_id, r.status) for r in results]
+        ai_notes = ai.enrich(results, packs, facts, root)
+        # Structural guarantee (AIEnrichment has no status) + belt-and-braces check.
+        if [(r.rule_id, r.status) for r in results] != before:
+            raise RuntimeError("AI enrichment changed a rule status")
     scores = [score_pack(p, results) for p in packs]
     graph = build_graph(facts.sinks)
 
@@ -63,6 +72,10 @@ def run_scan(
         scoring_formula=SCORING_FORMULA,
         disclaimer=DISCLAIMER,
     )
+    if ai is not None:
+        result.ai_used = any(r.ai is not None for r in results) or bool(ai_notes)
+        result.ai_model = getattr(ai.transport, "model", None) if result.ai_used else None
+        result.ai_classifications = [n.model_dump() for n in ai_notes]
     if baseline is not None:
         result.diff = diff_scans(baseline, result)
     return result, facts

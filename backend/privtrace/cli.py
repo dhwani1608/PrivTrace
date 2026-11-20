@@ -158,10 +158,18 @@ def scan(
     history: bool = typer.Option(True, help="Diff against, and save, the last scan of this folder (.privtrace/)."),
     packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
     fail_under: float | None = typer.Option(None, help="Exit 1 if the overall score is below this (CI)."),
+    ai: bool = typer.Option(True, help="Use Gemini for explanations if GEMINI_API_KEY and GEMINI_MODEL are set."),
 ) -> None:
     """Scan a local codebase against the selected compliance packs."""
+    from privtrace.ai.gateway import gateway_from_settings
+    from privtrace.core.redaction import install_log_redaction
     from privtrace.models.results import ScanResult
     from privtrace.scan import run_scan
+
+    install_log_redaction()
+    gateway = gateway_from_settings() if ai else None
+    if ai and gateway is None:
+        console.print("[dim]AI explanations off (set GEMINI_API_KEY and GEMINI_MODEL to enable).[/dim]")
 
     answers = _load_answers(answers_file, answer)
     prev = None
@@ -174,7 +182,8 @@ def scan(
         except ValueError:
             prev = None
     try:
-        result, _ = run_scan(target.resolve(), packs.split(","), answers, packs_dir=packs_dir, baseline=prev)
+        result, _ = run_scan(target.resolve(), packs.split(","), answers, packs_dir=packs_dir,
+                             baseline=prev, ai=gateway)
     except PackLoadError as e:
         console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e

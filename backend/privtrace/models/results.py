@@ -100,6 +100,8 @@ class ScanResult(BaseModel):
     data_flow: dict = Field(default_factory=dict)
     manual_answers: dict[str, ManualAnswerValue] = Field(default_factory=dict)
     ai_used: bool = False
+    ai_model: str | None = None
+    ai_classifications: list[dict] = Field(default_factory=list)
     diff: dict | None = None
     scoring_formula: str = ""
     disclaimer: str = ""
