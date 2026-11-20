@@ -29,7 +29,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Skeleton: FastAPI health, pack schema + loader, CLI stub, docker-compose | ✅ |
-| 2 | Detectors: PII names, Indian IDs (Verhoeff, Luhn), secrets | ⏳ |
+| 2 | Detectors: PII names, Indian IDs (Verhoeff, Luhn, GSTIN), secrets, redaction | ✅ |
 | 3 | AST parsing, sinks, data-flow map | ⏳ |
 | 4 | Rule engine, DPDP + Security packs, scoring | ⏳ |
 | 5 | HTML/JSON reports, CLI output | ⏳ |
