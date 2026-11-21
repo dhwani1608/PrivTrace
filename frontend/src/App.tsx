@@ -2,10 +2,36 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import Report from "./components/Report";
 import { ChecklistStep, ConnectStep, PacksStep, ProgressStep, type Source } from "./components/Steps";
+import { Icon } from "./components/ui";
 import type { Answer, ScanResult, ScanStatus } from "./types";
 
 type Step = "connect" | "packs" | "checklist" | "progress" | "report";
 const STEPS: [Step, string][] = [["connect", "Connect"], ["packs", "Frameworks"], ["checklist", "Checklist"], ["progress", "Scan"], ["report", "Report"]];
+
+function Logo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="relative flex h-9 w-9 items-center justify-center">
+        <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-violet-400 to-violet-700 shadow-glow" />
+        <svg viewBox="0 0 24 24" className="relative h-5 w-5" fill="none" stroke="#d4ff3f" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M8 19V5h5.5a4 4 0 0 1 0 8H9.5" />
+        </svg>
+      </span>
+      <span className="font-display text-lg font-semibold tracking-tight text-white">PrivTrace</span>
+    </div>
+  );
+}
+
+function Backdrop() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <div className="dot-grid absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
+      <div className="absolute -left-[10%] -top-[20%] h-[60vw] w-[60vw] animate-aurora rounded-full bg-violet-600/25 blur-[120px]" />
+      <div className="absolute -right-[15%] top-[10%] h-[45vw] w-[45vw] animate-aurora rounded-full bg-fuchsia-700/15 blur-[140px] [animation-delay:-8s]" />
+      <div className="absolute bottom-[-25%] left-[25%] h-[40vw] w-[40vw] animate-aurora rounded-full bg-lime/[.07] blur-[140px] [animation-delay:-14s]" />
+    </div>
+  );
+}
 
 export default function App() {
   const [step, setStep] = useState<Step>("connect");
@@ -17,9 +43,16 @@ export default function App() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aiAvailable, setAiAvailable] = useState(false);
+  const [apiUp, setApiUp] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { api.health().then((h) => setAiAvailable(h.ai_configured)).catch(() => setError("Cannot reach the PrivTrace API.")); }, []);
+  useEffect(() => {
+    api.health()
+      .then((h) => { setAiAvailable(h.ai_configured); setApiUp(true); })
+      .catch(() => { setApiUp(false); setError("Cannot reach the PrivTrace API."); });
+  }, []);
+
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
   const start = async (ans: Record<string, Answer>, useAi: boolean) => {
     if (!source) return;
@@ -46,7 +79,6 @@ export default function App() {
     try {
       setResult(await api.report(s.scan_id));
       setStep("report");
-      window.scrollTo({ top: 0 });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -65,57 +97,81 @@ export default function App() {
     }
   };
 
-  const reset = () => { setStep("connect"); setSource(null); setResult(null); setScanId(null); setBaselineId(null); setAnswers({}); };
+  const reset = () => { setStep("connect"); setSource(null); setResult(null); setScanId(null); setBaselineId(null); setAnswers({}); setError(null); };
   const idx = STEPS.findIndex(([k]) => k === step);
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white">P</div>
-            <div>
-              <div className="font-semibold leading-tight">PrivTrace</div>
-              <div className="text-xs text-slate-500">Compliance exposure scanner · DPDP · IT Act · CERT-In · GDPR</div>
-            </div>
+    <div className="noise relative min-h-screen">
+      <Backdrop />
+
+      <header className="sticky top-0 z-40 px-4 pt-4">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between gap-3 rounded-full border border-white/[.08] bg-ink-900/70 py-2 pl-4 pr-2 shadow-lift backdrop-blur-xl">
+          <button onClick={reset} className="shrink-0 rounded-full" aria-label="PrivTrace home — start a new scan"><Logo /></button>
+
+          <ol className="hidden items-center gap-1 md:flex" aria-label="Scan steps">
+            {STEPS.map(([k, label], i) => {
+              const state = i < idx ? "done" : i === idx ? "active" : "todo";
+              return (
+                <li key={k} aria-current={state === "active" ? "step" : undefined}
+                  className={`relative flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition ${state === "active" ? "bg-white/[.08] text-white" : state === "done" ? "text-zinc-300" : "text-zinc-500"}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${state === "done" ? "bg-lime text-ink-950" : state === "active" ? "bg-violet-500 text-white shadow-glow" : "bg-white/[.06] text-zinc-500"}`}>
+                    {state === "done" ? <Icon name="check" size={12} strokeWidth={3} /> : i + 1}
+                  </span>
+                  {label}
+                  {state === "active" && <span className="absolute -bottom-[9px] left-1/2 h-[2px] w-8 -translate-x-1/2 rounded-full bg-violet-400 shadow-[0_0_12px_2px_rgba(167,139,250,.8)]" />}
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="md:hidden rounded-full bg-white/[.06] px-3 py-1 font-mono text-[11px] text-zinc-300">{idx + 1}/{STEPS.length} · {STEPS[idx][1]}</span>
+            <span className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex ${aiAvailable ? "bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/30" : "bg-white/[.04] text-zinc-400 ring-1 ring-white/10"}`}>
+              <span className="relative flex h-2 w-2">
+                {apiUp && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${aiAvailable ? "bg-violet-400" : "bg-lime"}`} />}
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${apiUp === false ? "bg-rose-500" : aiAvailable ? "bg-violet-400" : "bg-lime"}`} />
+              </span>
+              {apiUp === false ? "API offline" : aiAvailable ? "Gemini on" : "Engine ready"}
+            </span>
           </div>
-          {aiAvailable && <span className="badge bg-violet-100 text-violet-800">Gemini on</span>}
-        </div>
+        </nav>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        {step !== "report" && (
-          <ol className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-            {STEPS.map(([k, label], i) => (
-              <li key={k} className="flex items-center gap-2">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${i < idx ? "bg-indigo-600 text-white" : i === idx ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-600" : "bg-slate-200 text-slate-500"}`}>{i + 1}</span>
-                <span className={i === idx ? "font-semibold" : "text-slate-500"}>{label}</span>
-                {i < STEPS.length - 1 && <span className="mx-1 text-slate-300">—</span>}
-              </li>
-            ))}
-          </ol>
-        )}
-
-        {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
-
-        {step === "connect" && (
-          <ConnectStep initial={source}
-            baselineNote={baselineId ? `Upload the fixed version — the report will show what changed since scan ${baselineId}.` : undefined}
-            onNext={(s) => { setSource(s); setStep("packs"); }} />
-        )}
-        {step === "packs" && <PacksStep selected={packs} onBack={() => setStep("connect")} onNext={(p) => { setPacks(p); setStep("checklist"); }} />}
-        {step === "checklist" && (
-          <div className={busy ? "pointer-events-none opacity-60" : ""}>
-            <ChecklistStep packs={packs} answers={answers} aiAvailable={aiAvailable} onBack={() => setStep("packs")} onStart={start} />
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:pt-12">
+        {error && (
+          <div role="alert" className="mb-6 flex animate-fade-up items-start gap-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 backdrop-blur">
+            <Icon name="alert" className="mt-0.5 shrink-0 text-rose-400" />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-rose-300/70 hover:text-rose-200" aria-label="Dismiss error">✕</button>
           </div>
         )}
-        {step === "progress" && scanId && <ProgressStep scanId={scanId} onDone={onDone} onError={onError} />}
-        {step === "report" && result && (
-          <Report result={result} canRescan={source?.kind === "github"} onRescan={rescan}
-            onUploadFixed={() => { setBaselineId(result.scan_id); setSource(null); setStep("connect"); }} onNew={reset} />
-        )}
+
+        <div key={step} className="animate-fade-up">
+          {step === "connect" && (
+            <ConnectStep initial={source}
+              baselineNote={baselineId ? `Upload the fixed version — the report will show what changed since scan ${baselineId}.` : undefined}
+              onNext={(s) => { setSource(s); setStep("packs"); }} />
+          )}
+          {step === "packs" && <PacksStep selected={packs} onBack={() => setStep("connect")} onNext={(p) => { setPacks(p); setStep("checklist"); }} />}
+          {step === "checklist" && (
+            <div className={busy ? "pointer-events-none opacity-60" : ""}>
+              <ChecklistStep packs={packs} answers={answers} aiAvailable={aiAvailable} busy={busy} onBack={() => setStep("packs")} onStart={start} />
+            </div>
+          )}
+          {step === "progress" && scanId && <ProgressStep scanId={scanId} onDone={onDone} onError={onError} />}
+          {step === "report" && result && (
+            <Report result={result} canRescan={source?.kind === "github"} onRescan={rescan}
+              onUploadFixed={() => { setBaselineId(result.scan_id); setSource(null); setStep("connect"); }} onNew={reset} />
+          )}
+        </div>
       </main>
-      <footer className="pb-8 text-center text-xs text-slate-400">Findings are engineering evidence, not legal advice.</footer>
+
+      <footer className="relative z-10 border-t border-white/[.05] px-4 py-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <span className="font-mono">© PrivTrace · DPDP · IT Act · CERT-In · GDPR</span>
+          <span>Findings are engineering evidence, not legal advice.</span>
+        </div>
+      </footer>
     </div>
   );
 }
