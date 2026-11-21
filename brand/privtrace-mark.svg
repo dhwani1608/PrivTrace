@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="PrivTrace">
+  <path d="M68 148 V38 H114 A42 42 0 0 1 114 122 H100" stroke="#F4F4F5" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="68" cy="170" r="11" fill="none" stroke="#F4F4F5" stroke-width="6"/>
+  <circle cx="88" cy="122" r="28" fill="none" stroke="#d4ff3f" stroke-width="3" opacity="0.45"/>
+  <circle cx="88" cy="122" r="15" fill="#d4ff3f"/></svg>

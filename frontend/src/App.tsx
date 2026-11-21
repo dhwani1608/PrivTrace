@@ -11,13 +11,8 @@ const STEPS: [Step, string][] = [["connect", "Connect"], ["packs", "Frameworks"]
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="relative flex h-9 w-9 items-center justify-center">
-        <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-violet-400 to-violet-700 shadow-glow" />
-        <svg viewBox="0 0 24 24" className="relative h-5 w-5" fill="none" stroke="#d4ff3f" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M8 19V5h5.5a4 4 0 0 1 0 8H9.5" />
-        </svg>
-      </span>
-      <span className="font-display text-lg font-semibold tracking-tight text-white">PrivTrace</span>
+      <img src="/privtrace-icon.svg" alt="" className="h-9 w-9 rounded-xl shadow-glow" />
+      <img src="/privtrace-wordmark.svg" alt="PrivTrace" className="h-6 w-auto" />
     </div>
   );
 }
