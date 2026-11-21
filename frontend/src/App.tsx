@@ -11,12 +11,11 @@ const STEPS: [Step, string][] = [["connect", "Connect"], ["packs", "Frameworks"]
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="relative flex h-9 w-9 items-center justify-center">
-        <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-violet-400 to-violet-700 shadow-glow" />
-        <svg viewBox="0 0 24 24" className="relative h-5 w-5" fill="none" stroke="#d4ff3f" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M8 19V5h5.5a4 4 0 0 1 0 8H9.5" />
-        </svg>
-      </span>
+      <svg viewBox="0 0 1024 1024" className="h-9 w-9 rounded-[10px] shadow-glow" aria-hidden="true">
+        <rect width="1024" height="1024" rx="210" fill="#13111f" />
+        <path d="M369 820V225H573a194 194 0 0 1 0 388H500" fill="none" stroke="#f3f3f4" strokeWidth={92} strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="461" cy="614" r="82" fill="#d4ff3f" />
+      </svg>
       <span className="font-display text-lg font-semibold tracking-tight text-white">PrivTrace</span>
     </div>
   );
@@ -137,7 +136,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:pt-12">
+      <main className={`relative z-10 mx-auto px-4 pb-16 pt-8 sm:pt-12 ${step === "report" ? "max-w-[1440px]" : "max-w-6xl"}`}>
         {error && (
           <div role="alert" className="mb-6 flex animate-fade-up items-start gap-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 backdrop-blur">
             <Icon name="alert" className="mt-0.5 shrink-0 text-rose-400" />

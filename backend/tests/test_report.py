@@ -10,6 +10,7 @@ from privtrace.cli import app as cli_app
 from privtrace.models.enums import RuleStatus
 from privtrace.models.results import ScanResult
 from privtrace.report.html_report import render_html
+from privtrace.report.pdf_report import render_pdf
 from privtrace.scan import run_scan
 from privtrace.scanner.detectors.checksums import verhoeff_check_digit
 
@@ -118,6 +119,16 @@ def test_html_report_sections_and_redaction(tmp_path):
     js = result.model_dump_json()
     assert fake_aadhaar not in js and "fake.support@example.com" not in js
     assert "compliant" not in html.lower().replace("non-compliance", "").replace("compliance", "")
+
+
+def test_pdf_report_renders_and_is_redacted(tmp_path):
+    fake_aadhaar = "23456789012" + verhoeff_check_digit("23456789012")
+    src = BAD + f'\nTEST_USER_AADHAAR = "{fake_aadhaar}"\n'
+    result, _ = run_scan(repo(tmp_path, "bad", src), ["dpdp", "security"])
+    pdf = render_pdf(result)
+    assert pdf.startswith(b"%PDF-") and len(pdf) > 5000
+    assert fake_aadhaar.encode() not in pdf
+    assert b"fake.support@example.com" not in pdf
 
 
 def test_json_roundtrip(tmp_path):

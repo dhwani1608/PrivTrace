@@ -1,7 +1,7 @@
 """PrivTrace command-line interface.
 
     privtrace packs list
-    privtrace scan ./repo --packs dpdp,security --out report.html
+    privtrace scan ./repo --packs dpdp,security --out report.html --out report.pdf
 """
 
 from __future__ import annotations
@@ -144,6 +144,10 @@ def write_report(result, out: Path) -> Path:
     if out.suffix.lower() == ".json":
         out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         return out
+    if out.suffix.lower() == ".pdf":
+        from privtrace.report.pdf_report import write_pdf
+
+        return write_pdf(result, out)
     return write_html(result, out if out.suffix.lower() in (".html", ".htm") else out.with_suffix(".html"))
 
 
@@ -151,7 +155,7 @@ def write_report(result, out: Path) -> Path:
 def scan(
     target: Path = typer.Argument(..., exists=True, file_okay=False, help="Local folder to scan."),
     packs: str = typer.Option("dpdp,security", help="Comma-separated pack ids or aliases."),
-    out: list[Path] = typer.Option([], "--out", help="Report file(s): .html and/or .json (repeatable)."),
+    out: list[Path] = typer.Option([], "--out", help="Report file(s): .html, .pdf and/or .json (repeatable)."),
     answers_file: Path | None = typer.Option(None, "--answers", help="JSON file {rule_id: yes|no|not_sure}."),
     answer: list[str] = typer.Option([], "--answer", help="RULE_ID=yes|no|not_sure (repeatable)."),
     baseline: Path | None = typer.Option(None, help="Previous JSON report to diff against."),

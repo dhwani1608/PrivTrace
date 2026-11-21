@@ -20,7 +20,7 @@ python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 privtrace packs list
-privtrace scan ./some-repo --packs dpdp,security --out report.html --out report.json
+privtrace scan ./some-repo --packs dpdp,security --out report.html --out report.pdf --out report.json
 uvicorn privtrace.api.main:app --reload       # API for the UI
 
 cd ../frontend && npm install && npm run dev   # UI on :5173, proxies /api to :8000

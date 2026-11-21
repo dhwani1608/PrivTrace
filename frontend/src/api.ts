@@ -43,4 +43,5 @@ export const api = {
   report: (scanId: string) => req<ScanResult>(`/api/scans/${scanId}/report.json`),
   reportHtmlUrl: (scanId: string, download = false) => `${BASE}/api/scans/${scanId}/report.html${download ? "?download=true" : ""}`,
   reportJsonUrl: (scanId: string) => `${BASE}/api/scans/${scanId}/report.json`,
+  reportPdfUrl: (scanId: string) => `${BASE}/api/scans/${scanId}/report.pdf`,
 };

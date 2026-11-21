@@ -23,6 +23,7 @@ from privtrace.db.session import get_sessionmaker
 from privtrace.models.enums import CheckType, ManualAnswerValue
 from privtrace.packs.loader import PackLoadError, load_packs, resolve_pack_ids
 from privtrace.report.html_report import render_html
+from privtrace.report.pdf_report import render_pdf
 
 _GITHUB = re.compile(r"^https://github\.com/[\w.\-]+/[\w.\-]+?(\.git)?/?$")
 
@@ -194,6 +195,12 @@ def create_app(sessionmaker_: sessionmaker[Session] | None = None, run_inline: b
     def report_html(scan_id: str, download: bool = False) -> HTMLResponse:
         headers = {"Content-Disposition": f'attachment; filename="privtrace-{scan_id}.html"'} if download else {}
         return HTMLResponse(render_html(_result_or_404(scan_id)), headers=headers)
+
+    @app.get("/api/scans/{scan_id}/report.pdf")
+    def report_pdf(scan_id: str, download: bool = True) -> Response:
+        disposition = "attachment" if download else "inline"
+        return Response(render_pdf(_result_or_404(scan_id)), media_type="application/pdf",
+                        headers={"Content-Disposition": f'{disposition}; filename="privtrace-{scan_id}.pdf"'})
 
     @app.delete("/api/scans/{scan_id}", status_code=204)
     def delete_scan(scan_id: str) -> Response:
