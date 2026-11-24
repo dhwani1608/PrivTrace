@@ -50,6 +50,7 @@ class CiRun:
     decision: GateDecision
     report: CiReport
     notes: list[str] = field(default_factory=list)
+    fix_all_new_prompt: str | None = None
 
 
 def load_ci_config(opts: CiOptions, all_packs) -> PrivTraceConfig:
@@ -96,8 +97,8 @@ def run_ci(opts: CiOptions, on_stage: Callable[[str], None] | None = None) -> Ci
                      else "ai.enabled is true but GEMINI_API_KEY / GEMINI_MODEL are not set: no AI was used.")
 
     stage("scanning HEAD")
-    head, _ = run_scan(root, cfg.packs, packs_dir=opts.packs_dir, config=cfg, ai=gateway,
-                       verify_cmd=CI_VERIFY_CMD, today=opts.today, prompts=cfg.report.fix_prompts)
+    head, facts = run_scan(root, cfg.packs, packs_dir=opts.packs_dir, config=cfg, ai=gateway,
+                           verify_cmd=CI_VERIFY_CMD, today=opts.today, prompts=cfg.report.fix_prompts)
 
     base: Baseline | None = None
     if opts.base:
@@ -123,4 +124,16 @@ def run_ci(opts: CiOptions, on_stage: Callable[[str], None] | None = None) -> Ci
     decision = evaluate_gate(head, diff, base, cfg.gate)
     decision.notes = notes + decision.notes
     report = build_ci_report(head, base, diff, decision, cfg)
-    return CiRun(cfg=cfg, head=head, base=base, diff=diff, decision=decision, report=report, notes=notes)
+    fix_all_new = None
+    if cfg.report.fix_prompts and diff.new:
+        from privtrace.core.config import get_settings
+        from privtrace.findings import SourceCache
+        from privtrace.fixprompt import PromptBuilder
+
+        builder = PromptBuilder([all_packs[i] for i in cfg.packs], facts, SourceCache(root), cfg.packs,
+                                max_lines=get_settings().max_snippet_lines, verify_cmd=CI_VERIFY_CMD)
+        by_rule = {(r.pack_id, r.rule_id): r for r in head.results}
+        pairs = [(by_rule[(f.pack_id, f.rule_id)], f) for f in diff.new if (f.pack_id, f.rule_id) in by_rule]
+        fix_all_new = builder.batch_prompt(pairs, top=10, max_chars=15_000)
+    return CiRun(cfg=cfg, head=head, base=base, diff=diff, decision=decision, report=report, notes=notes,
+                 fix_all_new_prompt=fix_all_new)

@@ -408,6 +408,12 @@ def ci(
     json_out: Path | None = typer.Option(None, "--json", help="Write the code-free CI result JSON here."),
     html: Path | None = typer.Option(None, "--html", help="Write the full HTML report here."),
     report_json: Path | None = typer.Option(None, "--report-json", help="Write the full scan JSON (includes redacted prompts)."),
+    sarif: Path | None = typer.Option(None, "--sarif", help="Write SARIF 2.1.0 (GitHub code scanning / PR annotations)."),
+    markdown: Path | None = typer.Option(None, "--markdown", help="Write the PR comment Markdown here."),
+    gitlab_codequality: Path | None = typer.Option(None, "--gitlab-codequality", help="Write GitLab Code Quality JSON."),
+    report_url: str | None = typer.Option(None, help="Link to the full report (shown in the PR comment)."),
+    summary: bool | None = typer.Option(None, "--summary/--no-summary",
+                                        help="Append Markdown to $GITHUB_STEP_SUMMARY (default: config report.job_summary)."),
     fail_on: str | None = typer.Option(None, help="Override gate.fail_on_severity: critical|high|medium|low|none."),
     min_score: float | None = typer.Option(None, help="Override gate.min_score."),
     packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
@@ -433,7 +439,8 @@ def ci(
             write_report(run.head, report_json if report_json.suffix == ".json" else report_json.with_suffix(".json"))
         if html:
             write_report(run.head, html)
-        _write_ci_extras(run)
+        _write_ci_extras(run, sarif=sarif, markdown=markdown, codequality=gitlab_codequality,
+                         report_url=report_url, summary=summary)
     except typer.Exit:
         raise
     except (ConfigError, PackLoadError) as e:
@@ -446,9 +453,32 @@ def ci(
     raise typer.Exit(0 if run.decision.passed else 1)
 
 
-def _write_ci_extras(run) -> None:
-    """Hook for extra CI outputs (SARIF, Markdown, job summary)."""
-    return None
+def _write_ci_extras(run, *, sarif: Path | None, markdown: Path | None, codequality: Path | None,
+                     report_url: str | None, summary: bool | None) -> None:
+    import json
+    import os
+
+    from privtrace.ci.outputs import render_markdown, to_codequality, to_sarif
+
+    def put(path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    if sarif:
+        put(sarif, json.dumps(to_sarif(run), indent=2))
+    if codequality:
+        put(codequality, json.dumps(to_codequality(run), indent=2))
+    md = None
+    if markdown:
+        md = render_markdown(run, report_url=report_url)
+        put(markdown, md)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    want_summary = run.cfg.report.job_summary if summary is None else summary
+    if want_summary and step_summary:
+        # the job summary allows 1 MiB, so it carries every new-finding prompt
+        text = render_markdown(run, report_url=report_url, max_prompts=50, limit=900_000)
+        with open(step_summary, "a", encoding="utf-8") as fh:
+            fh.write(text + "\n")
 
 
 @baseline_app.command("update")
