@@ -22,6 +22,8 @@ privtrace:
       privtrace ci . $BASE_ARGS \
         --gitlab-codequality gl-code-quality-report.json \
         --json privtrace.json --markdown privtrace.md --html privtrace-report.html
+      # Optional score history in the PrivTrace web UI (no code is sent; set PRIVTRACE_TOKEN as a masked variable):
+      #   add  --upload https://privtrace-836138728232.asia-south1.run.app
   artifacts:
     when: always
     reports:

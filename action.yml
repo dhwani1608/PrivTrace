@@ -45,6 +45,14 @@ inputs:
   python-version:
     description: Python used to run PrivTrace
     default: "3.12"
+  upload-url:
+    description: >
+      Optional PrivTrace server to send the code-free result to, for the CI history view
+      (e.g. https://privtrace-836138728232.asia-south1.run.app). Empty = no upload.
+    default: ""
+  upload-token:
+    description: Upload token (the server's PRIVTRACE_CI_TOKEN), from a secret
+    default: ""
   github-token:
     description: Token used to post the PR comment
     default: ${{ github.token }}
@@ -87,6 +95,8 @@ runs:
         IN_MIN_SCORE: ${{ inputs.min-score }}
         IN_FAIL_ON: ${{ inputs.fail-on }}
         IN_BASE: ${{ inputs.base }}
+        IN_UPLOAD: ${{ inputs.upload-url }}
+        PRIVTRACE_TOKEN: ${{ inputs.upload-token }}
         OUT: ${{ github.workspace }}/${{ inputs.output-dir }}
       run: |
         set +e
@@ -98,6 +108,7 @@ runs:
         if [ -n "$IN_PACKS" ]; then args+=(--packs "$IN_PACKS"); fi
         if [ -n "$IN_MIN_SCORE" ]; then args+=(--min-score "$IN_MIN_SCORE"); fi
         if [ -n "$IN_FAIL_ON" ]; then args+=(--fail-on "$IN_FAIL_ON"); fi
+        if [ -n "$IN_UPLOAD" ]; then args+=(--upload "$IN_UPLOAD"); fi
         base="$IN_BASE"
         if [ -z "$base" ] && [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$GITHUB_BASE_REF" ]; then
           base="origin/$GITHUB_BASE_REF"
