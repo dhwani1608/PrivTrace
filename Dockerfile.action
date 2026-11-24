@@ -1,0 +1,17 @@
+# PrivTrace CI image (scanner only, no web UI). Published to GHCR by
+# .github/workflows/publish-action-image.yml when a version tag is pushed, e.g.
+#   docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/<owner>/privtrace-ci:1 ci . --base origin/main
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
+    PRIVTRACE_PACKS_DIR=/opt/privtrace/packs
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/* \
+ && git config --system --add safe.directory '*'
+COPY backend/pyproject.toml /opt/privtrace/backend/pyproject.toml
+COPY backend/privtrace /opt/privtrace/backend/privtrace
+RUN pip install /opt/privtrace/backend
+COPY packs /opt/privtrace/packs
+LABEL org.opencontainers.image.source="https://github.com/dhwani1608/PrivTrace" \
+      org.opencontainers.image.description="PrivTrace compliance gate for CI"
+ENTRYPOINT ["privtrace"]
+CMD ["ci", "."]

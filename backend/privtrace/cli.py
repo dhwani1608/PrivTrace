@@ -481,6 +481,84 @@ def _write_ci_extras(run, *, sarif: Path | None, markdown: Path | None, codequal
             fh.write(text + "\n")
 
 
+FAST_CHECKS = {
+    "hardcoded_secrets": "hardcoded secret / API key",
+    "pii_in_logs": "personal data written to logs",
+    "identifiers_hardcoded": "personal identifier (Aadhaar, PAN, phone, email, card) in code",
+}
+
+
+def _staged_files() -> list[str]:
+    import subprocess
+
+    try:
+        out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+                             capture_output=True, text=True, check=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line for line in out.splitlines() if line.strip()]
+
+
+@app.command()
+def precommit(
+    files: list[str] = typer.Argument(None, help="Files to check (default: staged files)."),
+    max_kb: int = typer.Option(512, help="Skip files larger than this."),
+) -> None:
+    """Fast local check for pre-commit: secrets, PII in logs and Indian ID patterns, staged files only.
+
+    Exit 1 if anything is found. Honours `privtrace-ignore` comments. Cross-file data flows are not
+    followed in this mode; CI runs the full scan.
+    """
+    import shutil
+    import tempfile
+    from datetime import date
+
+    from privtrace.ci.suppress import find_suppressions
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.findings import SourceCache
+    from privtrace.models.enums import RuleStatus
+    from privtrace.rules.registry import get_check
+    from privtrace.scanner.analyze import analyze_path
+
+    _utf8_stdout()
+    install_log_redaction()
+    paths = [f.replace("\\", "/") for f in (files or _staged_files())]
+    tmp = Path(tempfile.mkdtemp(prefix="privtrace-precommit-"))
+    try:
+        copied = 0
+        for rel in paths:
+            src_path = Path(rel)
+            if not src_path.is_file() or src_path.is_absolute() or ".." in src_path.parts:
+                continue
+            if src_path.stat().st_size > max_kb * 1024:
+                continue
+            dest = tmp / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src_path, dest)
+            copied += 1
+        if not copied:
+            raise typer.Exit(0)
+        facts = analyze_path(tmp, root_name="staged")
+        sups = find_suppressions(SourceCache(tmp), facts.files, date.today())
+        problems: list[str] = []
+        for det, label in FAST_CHECKS.items():
+            outcome = get_check(det)(facts, {})
+            if outcome.status != RuleStatus.failed:
+                continue
+            for e in outcome.evidence:
+                if any(s.state == "active" and s.file == e.file and e.line in s.covers for s in sups):
+                    continue
+                problems.append(f"{e.file}:{e.line}: {label} ({e.detail})")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if problems:
+        typer.echo("PrivTrace found problems in staged files:", err=True)
+        for p in problems:
+            typer.echo(f"  {p}", err=True)
+        typer.echo('Fix them, or add `# privtrace-ignore: RULE-ID reason="..."` if this is intended.', err=True)
+        raise typer.Exit(1)
+
+
 @baseline_app.command("update")
 def baseline_update(
     target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Repository root."),
