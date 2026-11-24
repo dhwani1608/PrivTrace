@@ -115,7 +115,8 @@ def test_history_per_repo_and_branch_and_no_code_stored(api, tmp_path, monkeypat
 def test_cli_upload_sends_the_code_free_report(api, tmp_path, monkeypatch):
     (tmp_path / "app.py").write_text(LEAK, encoding="utf-8")
     (tmp_path / ".privtrace.yml").write_text("version: 1\npacks: [dpdp]\n", encoding="utf-8")
-    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    for var in ("GITHUB_STEP_SUMMARY", "GITHUB_ACTIONS", "GITLAB_CI"):  # behave as a local run, even on CI
+        monkeypatch.delenv(var, raising=False)
     sent: list[dict] = []
 
     def fake_post(url, content=None, headers=None, timeout=None):

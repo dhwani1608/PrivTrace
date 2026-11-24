@@ -26,7 +26,10 @@ else
   exit 2
 fi
 export PYTHONIOENCODING=utf-8
-unset GITHUB_STEP_SUMMARY
+# a non-editable install cannot locate the repo's packs/ on its own
+export PRIVTRACE_PACKS_DIR="${PRIVTRACE_PACKS_DIR:-$ROOT/packs}"
+# simulate a local run even when this script itself runs inside a CI job
+unset GITHUB_STEP_SUMMARY GITHUB_ACTIONS GITLAB_CI
 
 bold() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 pause() { if [ "$PAUSE" = "1" ]; then read -r -p "  (Enter to continue) " _; fi; }
