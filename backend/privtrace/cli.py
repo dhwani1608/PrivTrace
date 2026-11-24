@@ -330,6 +330,88 @@ def _scan_with_config(root: Path, packs: str | None, config: Path | None, packs_
 
 
 @app.command()
+def init(
+    path: Path = typer.Option(Path(".privtrace.yml"), "--path", help="Where to write the config."),
+    packs: str | None = typer.Option(None, help="Comma-separated packs (skips the pack question)."),
+    answer: list[str] = typer.Option([], "--answer", help="RULE_ID=yes|no|not_sure (repeatable, skips that question)."),
+    skip_checklist: bool = typer.Option(False, "--skip-checklist", help="Do not ask the manual checklist questions."),
+    min_score: float | None = typer.Option(None, help="Overall score threshold for the gate."),
+    fail_on: str | None = typer.Option(None, help="critical|high|medium|low|none"),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing file."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Create .privtrace.yml: pick packs and walk through the manual checklist once."""
+    from privtrace.ci.config import ConfigError, render_config
+    from privtrace.models.enums import CheckType, ManualAnswerValue
+    from privtrace.packs.loader import resolve_pack_ids
+
+    _utf8_stdout()
+    if path.exists() and not force:
+        console.print(f"[red]error:[/red] {path} already exists (use --force to overwrite).")
+        raise typer.Exit(2)
+    try:
+        all_packs = load_packs(packs_dir)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    interactive = packs is None
+    if packs is None:
+        console.rule("PrivTrace init")
+        for p in all_packs.values():
+            console.print(f"  [bold]{p.id}[/bold]  {escape(p.name)} [dim]({p.jurisdiction}, {len(p.rules)} rules)[/dim]")
+        packs = typer.prompt("Which packs apply to this repository? (comma-separated)",
+                             default="dpdp-2023,certin-2022,security-baseline")
+    try:
+        ids = resolve_pack_ids(packs.split(","), all_packs)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    given = _load_answers(None, answer)
+    answers: dict[str, ManualAnswerValue] = {}
+    questions: dict[str, str] = {}
+    choices = {"y": "yes", "yes": "yes", "n": "no", "no": "no", "?": "not_sure", "not_sure": "not_sure",
+               "not sure": "not_sure", "s": "", "skip": "", "": ""}
+    asked = False
+    for pid in ids:
+        for rule in all_packs[pid].rules:
+            if rule.check_type == CheckType.automated or not rule.question:
+                continue
+            questions[rule.id] = rule.question
+            if rule.id in given:
+                answers[rule.id] = given[rule.id]
+                continue
+            if skip_checklist:
+                continue
+            if not asked:
+                console.print("\nManual checklist: answer y / n / ? (not sure), or press Enter to skip.")
+                asked = True
+            while True:
+                raw = typer.prompt(f"[{rule.id}] {rule.question}", default="", show_default=False).strip().lower()
+                if raw in choices:
+                    break
+                console.print("  please answer y, n, ? or press Enter")
+            if choices[raw]:
+                answers[rule.id] = ManualAnswerValue(choices[raw])
+
+    if min_score is None:
+        min_score = float(typer.prompt("Minimum overall score for the gate", default="70")) if interactive else 70.0
+    fail_on = (fail_on or "high").lower()
+    if fail_on not in ("critical", "high", "medium", "low", "none"):
+        raise typer.BadParameter("--fail-on must be critical, high, medium, low or none")
+    try:
+        text = render_config(ids, answers, questions, min_score=min_score, fail_on=fail_on)
+    except ConfigError as e:  # pragma: no cover - render_config validates its own output
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    path.write_text(text, encoding="utf-8")
+    console.print(f"[green]wrote {path}[/green] · packs: {', '.join(ids)} · {len(answers)} checklist answer(s)")
+    console.print("Next: commit it, then `privtrace baseline update` and add the workflow from "
+                  "examples/github/privtrace.yml.")
+
+
+@app.command()
 def verify(
     config: Path = typer.Option(..., exists=True, dir_okay=False, help="Verify config YAML (see demo/verify-*.yaml)."),
     out: Path | None = typer.Option(None, help="Write the verify report as JSON."),
