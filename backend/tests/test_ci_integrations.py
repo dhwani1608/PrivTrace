@@ -102,3 +102,32 @@ def test_precommit_respects_suppressions(tmp_path, monkeypatch):
 def test_precommit_with_nothing_staged(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert runner.invoke(cli_app, ["precommit"]).exit_code == 0
+
+
+# ---------------------------------------------------------------- the pitch: scripts/demo_ci.sh
+@pytest.mark.skipif(BASH is None or shutil.which("git") is None, reason="bash and git needed")
+def test_demo_ci_script_end_to_end(tmp_path):
+    """good-change passes, risky-change fails with the expected findings, the fix passes again."""
+    import json
+    import os
+    import sys
+
+    env = {**os.environ, "PRIVTRACE_DEMO_OUT": str(tmp_path / "out"), "PYTHONIOENCODING": "utf-8",
+           "PRIVTRACE": str(Path(sys.executable).with_name("privtrace.exe" if os.name == "nt" else "privtrace"))}
+    env.pop("GITHUB_STEP_SUMMARY", None)
+    r = subprocess.run([BASH, str(ROOT / "scripts" / "demo_ci.sh")], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", env=env, timeout=600)
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-2000:]
+    out = tmp_path / "out"
+    good = json.loads((out / "good-change.json").read_text(encoding="utf-8"))
+    risky = json.loads((out / "risky-change.json").read_text(encoding="utf-8"))
+    fixed = json.loads((out / "fixed.json").read_text(encoding="utf-8"))
+    assert good["gate"]["passed"] and good["overall"]["delta"] == 0
+    assert not risky["gate"]["passed"]
+    blocking = sorted(f["rule_id"] for f in risky["findings"] if f["blocking"])
+    assert blocking == ["DPDP-SEC-01", "DPDP-SEC-02", "SECB-LLM-01", "SECB-LOG-01"]
+    dpdp = next(p for p in risky["packs"] if p["pack_id"] == "dpdp-2023")
+    assert dpdp["delta"] < 0
+    md = (out / "risky-change.md").read_text(encoding="utf-8")
+    assert "## ❌ PrivTrace gate failed" in md and "Fix prompt: <code>DPDP-SEC-02</code>" in md
+    assert fixed["gate"]["passed"] and fixed["counts"]["new"] == 0
