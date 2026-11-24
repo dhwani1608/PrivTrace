@@ -1,0 +1,18 @@
+# pre-commit hook: fast local check of staged files for hardcoded secrets, personal data in logs and
+# Indian ID / personal identifier patterns. Requires `privtrace` on PATH:
+#   pip install "git+https://github.com/dhwani1608/PrivTrace.git#subdirectory=backend"
+#
+# In your .pre-commit-config.yaml:
+#   repos:
+#     - repo: https://github.com/dhwani1608/PrivTrace
+#       rev: main            # pin a tag
+#       hooks:
+#         - id: privtrace-fast
+- id: privtrace-fast
+  name: PrivTrace (secrets, PII in logs, Indian IDs)
+  description: Fast PrivTrace check of staged files. CI runs the full scan.
+  entry: privtrace precommit
+  language: system
+  types: [text]
+  pass_filenames: true
+  require_serial: true

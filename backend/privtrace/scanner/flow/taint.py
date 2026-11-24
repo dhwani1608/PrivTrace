@@ -99,6 +99,38 @@ def is_dynamic_string(node: ast.AST) -> bool:
 
 
 _NON_PII_ATTR = re.compile(r"^(id|pk|uuid|guid|\w+_id|\w+_at|created|updated|count|status|state|type|kind|version|is_\w+|has_\w+)$")
+# Pydantic / dataclass-style serialisers that accept include= / exclude= field selections.
+_SERIALISERS = frozenset({"model_dump", "model_dump_json", "dict", "json"})
+
+
+def _field_names(node: ast.AST | None) -> set[str] | None:
+    """{'a', 'b'} for literal sets / lists / tuples of strings or dict keys; None if not literal."""
+    if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
+        elts = node.elts
+    elif isinstance(node, ast.Dict):
+        elts = [k for k in node.keys if k is not None]
+    else:
+        return None
+    names = {e.value for e in elts if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return names if len(names) == len(elts) else None
+
+
+def _apply_include_exclude(call: ast.Call, value: Value) -> Value:
+    """`req.model_dump(exclude={"password"})` does not carry the password (and `include=` keeps only
+    the listed fields). Only literal selections are trusted; anything dynamic keeps every taint."""
+    taints, sanitized = value
+    kw = {k.arg: k.value for k in call.keywords if k.arg}
+    exclude = _field_names(kw.get("exclude"))
+    include = _field_names(kw.get("include"))
+
+    def field(t: Taint) -> str:
+        return t.name.rsplit(".", 1)[-1]
+
+    if exclude:
+        taints = frozenset(t for t in taints if field(t) not in exclude)
+    if include is not None:
+        taints = frozenset(t for t in taints if field(t) in include or t.category == PARAM)
+    return (taints, sanitized)
 _SQL_KEYWORD = re.compile(r"\b(select|insert|update|delete|where|from)\b", re.I)
 
 
@@ -324,7 +356,10 @@ class FunctionAnalyzer:
         model = self.index.models.get(last)
         if model and model.fields:
             parts.append((frozenset(Taint(category=f.category, name=f"{model.name}.{f.name}") for f in model.fields), False))
-        return _union(*parts)
+        value = _union(*parts)
+        if last in _SERIALISERS:
+            value = _apply_include_exclude(call, value)
+        return value
 
     # ---------------- statements ----------------
     def _block(self, stmts: list[ast.stmt]) -> None:

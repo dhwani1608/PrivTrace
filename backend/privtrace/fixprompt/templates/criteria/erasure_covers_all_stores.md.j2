@@ -1,0 +1,9 @@
+{% import "_macros.md.j2" as m %}
+{% if item.stores %}
+The delete path must remove this user's data from every one of these stores:
+{% for s in item.stores %}
+- [ ] {{ s }}
+{% endfor %}
+
+{% endif %}
+{{ m.criteria(item) }}

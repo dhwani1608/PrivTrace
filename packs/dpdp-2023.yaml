@@ -30,6 +30,8 @@ rules:
       Redact or pseudonymise identifiers before building prompts (e.g. replace PAN/phone/email
       with placeholders), send only the fields the task needs, and keep the mapping server-side.
     tags: [ai, third-party, security]
+    fix_prompt_hints:
+      - "Redact with one shared helper (e.g. redact_pii) before the prompt string is built; do not rely on the LLM provider to drop identifiers."
 
   - id: DPDP-SEC-02
     title: Personal data written to application logs
@@ -46,6 +48,8 @@ rules:
       Log identifiers (user_id, request_id) instead of personal fields, never log raw request
       bodies, and add a redacting logging filter as a safety net.
     tags: [logging, security]
+    fix_prompt_hints:
+      - "Never log request.body(), model_dump() or whole payload objects; log user_id / request_id instead."
 
   - id: DPDP-SEC-03
     title: Passwords stored or logged without hashing
@@ -60,6 +64,8 @@ rules:
       fast-hashed (MD5/SHA) passwords are not a reasonable safeguard.
     remediation: Hash passwords with bcrypt or argon2 (e.g. passlib CryptContext) and never log them.
     tags: [credentials, security]
+    fix_prompt_hints:
+      - "Use argon2id or bcrypt (passlib CryptContext or argon2-cffi), never plain SHA-256 or MD5."
 
   - id: DPDP-SEC-04
     title: Sensitive identifiers stored without encryption or masking
@@ -92,6 +98,8 @@ rules:
       Make the delete-user handler remove the user's data from every store found in the data-flow
       map (DB rows, embeddings, cache keys, files), or enqueue a job that does, and test it.
     tags: [erasure, rights]
+    fix_prompt_hints:
+      - "The delete path must also cover cache keys (e.g. Redis user:{id}:* / profile:{id}) and vector-store rows (e.g. pgvector embeddings) keyed by user_id."
 
   - id: DPDP-RET-01
     title: Personal data cached with no expiry

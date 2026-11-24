@@ -36,6 +36,10 @@ class PackRule(BaseModel):
     why_it_matters: str
     remediation: str
     tags: list[str] = Field(default_factory=list)
+    fix_prompt_hints: list[str] = Field(
+        default_factory=list,
+        description="Rule-specific guidance added to AI fix prompts, e.g. 'use argon2 or bcrypt'.",
+    )
 
     @field_validator("id")
     @classmethod

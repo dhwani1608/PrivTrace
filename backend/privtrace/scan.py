@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from privtrace import DISCLAIMER
 from privtrace.ai.gateway import AIGateway
+from privtrace.core.config import get_settings
+from privtrace.findings import SourceCache, extract_findings
+from privtrace.fixprompt import PromptBuilder, attach_prompts
 from privtrace.models.enums import ManualAnswerValue
 from privtrace.models.results import ScanResult, ScanSummary
 from privtrace.packs.loader import load_packs, resolve_pack_ids
@@ -18,6 +23,9 @@ from privtrace.rules.engine import evaluate
 from privtrace.scanner.analyze import analyze_path
 from privtrace.scanner.facts import CodeFacts
 from privtrace.scanner.flow.graph import build_graph, is_risky
+
+if TYPE_CHECKING:
+    from privtrace.ci.config import PrivTraceConfig
 
 
 def run_scan(
@@ -30,20 +38,32 @@ def run_scan(
     facts: CodeFacts | None = None,
     baseline: ScanResult | None = None,
     fixes: bool = True,
+    prompts: bool = True,
+    verify_cmd: str | None = None,
     ai: AIGateway | None = None,
     on_stage: Callable[[str], None] | None = None,
+    config: PrivTraceConfig | None = None,
+    today: date | None = None,
 ) -> tuple[ScanResult, CodeFacts]:
-    """Scan `root` (already on local disk) against the selected packs."""
+    """Scan `root` (already on local disk) against the selected packs.
+
+    `config` (a validated `.privtrace.yml`) adds disabled rules, severity overrides, path scope and
+    checklist answers. Inline `privtrace-ignore` suppressions apply to every scan.
+    """
+    from privtrace.ci.policy import apply_policy
+
     all_packs = load_packs(packs_dir)
     ids = resolve_pack_ids(pack_ids, all_packs)
     packs = [all_packs[i] for i in ids]
-    answers = answers or {}
+    answers = {**(config.manual_answers if config else {}), **(answers or {})}
 
     stage = on_stage or (lambda _name: None)
     stage("analyzing")
     facts = facts or analyze_path(root, root_name=target_label or root.name)
     stage("evaluating")
     results = evaluate(packs, facts, answers)
+    src = SourceCache(root)
+    results, suppressions, disabled = apply_policy(results, config, src, facts.files, today=today)
     if fixes:
         generate_fixes(results, packs, facts, root)  # needs the source, so before workspace cleanup
     ai_notes = []
@@ -54,6 +74,13 @@ def run_scan(
         # Structural guarantee (AIEnrichment has no status) + belt-and-braces check.
         if [(r.rule_id, r.status) for r in results] != before:
             raise RuntimeError("AI enrichment changed a rule status")
+    findings = extract_findings(results, src)
+    file_prompts: dict[str, str] = {}
+    fix_all: str | None = None
+    if prompts:
+        builder = PromptBuilder(packs, facts, src, ids, max_lines=get_settings().max_snippet_lines,
+                                verify_cmd=verify_cmd)
+        file_prompts, fix_all = attach_prompts(results, findings, builder)
     scores = [score_pack(p, results) for p in packs]
     graph = build_graph(facts.sinks)
 
@@ -75,6 +102,11 @@ def run_scan(
         ),
         data_flow={**graph.model_dump(), "mermaid": graph.to_mermaid()},
         manual_answers={k: v for k, v in answers.items()},
+        findings=findings,
+        file_prompts=file_prompts,
+        fix_all_prompt=fix_all,
+        suppressions=suppressions,
+        disabled_rules=disabled,
         scoring_formula=SCORING_FORMULA,
         disclaimer=DISCLAIMER,
     )

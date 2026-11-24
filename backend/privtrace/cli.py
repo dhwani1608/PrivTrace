@@ -19,6 +19,8 @@ from privtrace.packs.loader import PackLoadError, load_packs
 app = typer.Typer(help="PrivTrace: scan code against compliance packs.", no_args_is_help=True)
 packs_app = typer.Typer(help="Inspect compliance packs.", no_args_is_help=True)
 app.add_typer(packs_app, name="packs")
+baseline_app = typer.Typer(help="Manage the committed findings baseline (.privtrace-baseline.json).", no_args_is_help=True)
+app.add_typer(baseline_app, name="baseline")
 
 console = Console()
 
@@ -118,14 +120,21 @@ def print_summary(result) -> None:
                       f"fixed {len(d['fixed'])}, new failures {len(d['regressed'])}")
     failed = [r for r in result.results if r.status == RuleStatus.failed]
     failed.sort(key=lambda r: -r.severity.rank)
+    ids = {(f.rule_id, f.file, f.line): f.id for f in getattr(result, "findings", [])}
     for r in failed:
         console.print()
         console.print(f"[red]✗[/red] [bold]{r.rule_id}[/bold] ({r.severity.value}) {escape(r.title)}")
         console.print(f"  {escape(r.message)}")
         for e in r.evidence[:5]:
-            console.print(f"  [cyan]{escape(e.file)}:{e.line}[/cyan] {escape(e.detail)}")
+            fid = ids.get((r.rule_id, e.file, e.line))
+            tag = f" [dim]id {fid}[/dim]" if fid else ""
+            console.print(f"  [cyan]{escape(e.file)}:{e.line}[/cyan] {escape(e.detail)}{tag}")
         if len(r.evidence) > 5:
             console.print(f"  [dim]… {len(r.evidence) - 5} more[/dim]")
+    if failed:
+        console.print()
+        console.print("[dim]AI fix prompts: `privtrace prompt <id>`, `privtrace prompt <RULE-ID>`, "
+                      "`privtrace prompt --file <path>` or `privtrace prompt --all`.[/dim]")
     console.print()
     console.print(f"[dim]{result.disclaimer}[/dim]")
 
@@ -199,6 +208,498 @@ def scan(
         hist.write_text(result.model_dump_json(), encoding="utf-8")
     if fail_under is not None and (result.overall_score or 0) < fail_under:
         raise typer.Exit(1)
+
+
+def _utf8_stdout() -> None:
+    import sys
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):  # pragma: no cover - not a TextIOWrapper
+            pass
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Best effort: pbcopy / clip / wl-copy / xclip / xsel. Returns False if none worked."""
+    import shutil
+    import subprocess
+    import sys
+
+    candidates: list[tuple[list[str], bytes]] = []
+    if sys.platform == "darwin":
+        candidates.append((["pbcopy"], text.encode("utf-8")))
+    elif sys.platform.startswith("win"):
+        candidates.append((["clip"], b"\xff\xfe" + text.encode("utf-16-le")))
+    else:
+        candidates += [(["wl-copy"], text.encode()), (["xclip", "-selection", "clipboard"], text.encode()),
+                       (["xsel", "--clipboard", "--input"], text.encode())]
+    for cmd, data in candidates:
+        if shutil.which(cmd[0]) is None:
+            continue
+        try:
+            subprocess.run(cmd, input=data, check=True, timeout=5)
+            return True
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return False
+
+
+@app.command()
+def prompt(
+    finding: str | None = typer.Argument(None, help="Finding id (or fingerprint prefix) or a rule id like DPDP-SEC-02."),
+    target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Folder to scan."),
+    file: str | None = typer.Option(None, "--file", help="Print the prompt that fixes every finding in this file."),
+    all_: bool = typer.Option(False, "--all", help="Print the batch prompt for the top findings."),
+    top: int = typer.Option(10, help="With --all: how many findings to include."),
+    packs: str | None = typer.Option(None, help="Comma-separated packs (default: from .privtrace.yml, else dpdp,security)."),
+    config: Path | None = typer.Option(None, help="PrivTrace config (default: ./.privtrace.yml in the target if present)."),
+    copy: bool = typer.Option(False, "--copy", help="Also copy the prompt to the clipboard."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Print a copy-paste AI fix prompt (offline: no AI call is made).
+
+        privtrace prompt 3f2a9c1b0d
+        privtrace prompt DPDP-SEC-02
+        privtrace prompt --file app/routes.py
+        privtrace prompt --all --top 10 > fixes.md
+    """
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.fixprompt import PromptBuilder
+
+    install_log_redaction()
+    _utf8_stdout()
+    if sum(bool(x) for x in (finding, file, all_)) != 1:
+        raise typer.BadParameter("give exactly one of: a finding id / rule id, --file PATH, or --all")
+    root = target.resolve()
+    try:
+        result, facts, ctx = _scan_with_config(root, packs, config, packs_dir)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    text: str | None = None
+    if all_:
+        builder: PromptBuilder = ctx["builder"]
+        by_rule = {(r.pack_id, r.rule_id): r for r in result.results}
+        pairs = [(by_rule[(f.pack_id, f.rule_id)], f) for f in result.findings]
+        text = builder.batch_prompt(pairs, top=top)
+        if text is None:
+            console.print("[green]No failed or needs-review findings: nothing to fix.[/green]")
+            raise typer.Exit(0)
+    elif file:
+        rel = file.replace("\\", "/")
+        while rel.startswith("./"):
+            rel = rel[2:]
+        text = result.file_prompts.get(rel)
+        if text is None:
+            console.print(f"[yellow]No findings in {escape(rel)}.[/yellow] Files with findings: "
+                          + ", ".join(sorted(result.file_prompts)) or "none")
+            raise typer.Exit(1)
+    else:
+        key = (finding or "").strip()
+        rule = next((r for r in result.results if r.rule_id.upper() == key.upper() and r.fix_prompt), None)
+        if rule is not None:
+            text = rule.fix_prompt
+        else:
+            matches = [f for f in result.findings if f.fingerprint.startswith(key.lower()) or f.id == key]
+            if len(matches) != 1:
+                console.print(f"[red]error:[/red] {'no' if not matches else 'more than one'} finding matches {escape(key)!r}. "
+                              "Use an id from `privtrace scan` / the JSON report, or a rule id.")
+                raise typer.Exit(1)
+            text = matches[0].fix_prompt
+    typer.echo(text, nl=False)
+    if copy:
+        if copy_to_clipboard(text or ""):
+            typer.echo("Copied to clipboard ✓", err=True)
+        else:
+            typer.echo("Clipboard not available here; the prompt is printed above.", err=True)
+
+
+def resolve_config(root: Path, config: Path | None, all_packs, *, required: bool = False):
+    """Load + validate `config` (or `<root>/.privtrace.yml` if present). Raises ConfigError."""
+    from privtrace.ci.config import DEFAULT_CONFIG_NAME, load_and_validate
+
+    path = config if config is not None else root / DEFAULT_CONFIG_NAME
+    if config is None and not path.exists() and not required:
+        return None
+    return load_and_validate(path, all_packs)
+
+
+def _scan_with_config(root: Path, packs: str | None, config: Path | None, packs_dir: Path | None):
+    """Scan for CLI helpers. Honours .privtrace.yml (packs, rules, paths, answers) when present."""
+    from privtrace.ci.config import ConfigError
+    from privtrace.findings import SourceCache
+    from privtrace.fixprompt import PromptBuilder
+    from privtrace.scan import run_scan
+
+    all_packs = load_packs(packs_dir)
+    try:
+        cfg = resolve_config(root, config, all_packs)
+    except ConfigError as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    pack_list = packs.split(",") if packs else (cfg.packs if cfg else ["dpdp", "security"])
+    from privtrace.packs.loader import resolve_pack_ids
+
+    ids = resolve_pack_ids(pack_list, all_packs)
+    verify = "privtrace ci" if cfg else f"privtrace scan . --packs {','.join(ids)}"
+    result, facts = run_scan(root, ids, packs_dir=packs_dir, config=cfg, verify_cmd=verify)
+    builder = PromptBuilder([all_packs[i] for i in ids], facts, SourceCache(root), ids, verify_cmd=verify)
+    return result, facts, {"builder": builder, "config": cfg}
+
+
+def _fmt_score(v: float | None) -> str:
+    return "n/a" if v is None else f"{v:.0f}"
+
+
+def _fmt_delta(before: float | None, after: float | None) -> str:
+    if before is None or after is None:
+        return ""
+    d = after - before
+    if abs(d) < 0.05:
+        return " [dim](=)[/dim]"
+    return f" [green]▲{d:.0f}[/green]" if d > 0 else f" [red]▼{abs(d):.0f}[/red]"
+
+
+def print_ci_summary(run) -> None:
+    from privtrace.models.enums import RuleStatus
+
+    rep = run.report
+    badge = "[bold green]PASSED ✅[/bold green]" if rep.gate.passed else "[bold red]FAILED ❌[/bold red]"
+    console.rule(f"PrivTrace CI gate · {badge}")
+    base = rep.baseline.get("source") or "none"
+    console.print(f"Baseline: {escape(str(base))}   New: {rep.counts['new']}   Existing: {rep.counts['existing']}   "
+                  f"Fixed: {rep.counts['fixed']}   Blocking: {rep.counts['blocking']}")
+    t = Table("Framework", "Score", "Minimum")
+    t.add_row("Overall", _fmt_score(rep.overall.before) + " → " + _fmt_score(rep.overall.after)
+              + _fmt_delta(rep.overall.before, rep.overall.after) if rep.overall.before is not None
+              else _fmt_score(rep.overall.after), "" if rep.overall.minimum is None else f"{rep.overall.minimum:g}")
+    for p in rep.packs:
+        score = (_fmt_score(p.before) + " → " + _fmt_score(p.after) + _fmt_delta(p.before, p.after)
+                 if p.before is not None else _fmt_score(p.after))
+        t.add_row(p.short_name, score, "" if p.minimum is None else f"{p.minimum:g}")
+    console.print(t)
+    new = [f for f in run.diff.new]
+    if new:
+        console.print("[bold]New findings[/bold]")
+        for f in new[:20]:
+            mark = "[red]✗[/red]" if f.status == RuleStatus.failed else "[yellow]?[/yellow]"
+            block = " [red](blocking)[/red]" if f.fingerprint in rep.gate.blocking else ""
+            console.print(f"  {mark} {f.severity.value:<8} {f.rule_id:<15} [cyan]{escape(f.location)}[/cyan]{block} [dim]id {f.id}[/dim]")
+        if len(new) > 20:
+            console.print(f"  … {len(new) - 20} more")
+    if run.diff.fixed:
+        console.print(f"[green]Fixed: {len(run.diff.fixed)} finding(s) 🎉[/green]")
+    for r in rep.gate.reasons:
+        console.print(f"[red]• {escape(r)}[/red]")
+    for n in rep.gate.notes:
+        console.print(f"[dim]• {escape(n)}[/dim]")
+    console.print(f"[dim]{rep.disclaimer}[/dim]")
+
+
+@app.command()
+def ci(
+    target: Path = typer.Argument(Path("."), help="Repository root (default: current directory)."),
+    config: Path | None = typer.Option(None, help="Config file (default: <target>/.privtrace.yml)."),
+    packs: str | None = typer.Option(None, help="Override the packs from the config (comma-separated)."),
+    base: str | None = typer.Option(None, help="Git ref to compare against, e.g. origin/main (scanned locally)."),
+    baseline: Path | None = typer.Option(None, help="Baseline file (default: baseline.file from the config, if present)."),
+    json_out: Path | None = typer.Option(None, "--json", help="Write the code-free CI result JSON here."),
+    html: Path | None = typer.Option(None, "--html", help="Write the full HTML report here."),
+    report_json: Path | None = typer.Option(None, "--report-json", help="Write the full scan JSON (includes redacted prompts)."),
+    sarif: Path | None = typer.Option(None, "--sarif", help="Write SARIF 2.1.0 (GitHub code scanning / PR annotations)."),
+    markdown: Path | None = typer.Option(None, "--markdown", help="Write the PR comment Markdown here."),
+    gitlab_codequality: Path | None = typer.Option(None, "--gitlab-codequality", help="Write GitLab Code Quality JSON."),
+    report_url: str | None = typer.Option(None, help="Link to the full report (shown in the PR comment)."),
+    summary: bool | None = typer.Option(None, "--summary/--no-summary",
+                                        help="Append Markdown to $GITHUB_STEP_SUMMARY (default: config report.job_summary)."),
+    upload: str | None = typer.Option(None, help="PrivTrace server URL: send the code-free result for score history."),
+    token: str | None = typer.Option(None, envvar="PRIVTRACE_TOKEN", help="Upload token (or PRIVTRACE_TOKEN)."),
+    fail_on: str | None = typer.Option(None, help="Override gate.fail_on_severity: critical|high|medium|low|none."),
+    min_score: float | None = typer.Option(None, help="Override gate.min_score."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Run the CI compliance gate. Exit codes: 0 passed, 1 gate failed, 2 config or scan error.
+
+        privtrace ci --base origin/main --json out.json --html report.html
+    """
+    from privtrace.ci.config import ConfigError
+    from privtrace.ci.runner import CiOptions, run_ci
+    from privtrace.core.redaction import install_log_redaction
+
+    _utf8_stdout()
+    install_log_redaction()
+    try:
+        run = run_ci(CiOptions(root=target.resolve(), config=config, packs=packs, base=base, baseline=baseline,
+                               fail_on=fail_on, min_score=min_score, packs_dir=packs_dir),
+                     on_stage=lambda s: console.print(f"[dim]… {s}[/dim]"))
+        if json_out:
+            json_out.parent.mkdir(parents=True, exist_ok=True)
+            json_out.write_text(run.report.model_dump_json(indent=2), encoding="utf-8")
+        if report_json:
+            write_report(run.head, report_json if report_json.suffix == ".json" else report_json.with_suffix(".json"))
+        if html:
+            write_report(run.head, html)
+        _write_ci_extras(run, sarif=sarif, markdown=markdown, codequality=gitlab_codequality,
+                         report_url=report_url, summary=summary)
+    except typer.Exit:
+        raise
+    except (ConfigError, PackLoadError) as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    except Exception as e:  # an error must never look like a pass
+        console.print(f"[red]error:[/red] PrivTrace could not complete the scan ({type(e).__name__}: {escape(str(e))})")
+        raise typer.Exit(2) from e
+    print_ci_summary(run)
+    if upload:
+        upload_ci_report(run.report, upload, token)
+    raise typer.Exit(0 if run.decision.passed else 1)
+
+
+def upload_ci_report(report, server: str, token: str | None) -> bool:
+    """POST the code-free CiReport to <server>/api/ci/runs. Only runs when --upload is given.
+
+    A failed upload is reported but does not change the gate's exit code.
+    """
+    import httpx
+
+    url = server.rstrip("/") + "/api/ci/runs"
+    if not token:
+        typer.echo("upload skipped: no token (set --token or PRIVTRACE_TOKEN)", err=True)
+        return False
+    try:
+        resp = httpx.post(url, content=report.model_dump_json(), timeout=20,
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    except httpx.HTTPError as e:
+        typer.echo(f"upload failed: {type(e).__name__}", err=True)
+        return False
+    if resp.status_code >= 300:
+        typer.echo(f"upload failed: HTTP {resp.status_code} {resp.text[:200]}", err=True)
+        return False
+    typer.echo(f"uploaded CI result to {url} (no code was sent)", err=True)
+    return True
+
+
+def _write_ci_extras(run, *, sarif: Path | None, markdown: Path | None, codequality: Path | None,
+                     report_url: str | None, summary: bool | None) -> None:
+    import json
+    import os
+
+    from privtrace.ci.outputs import render_markdown, to_codequality, to_sarif
+
+    def put(path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    if sarif:
+        put(sarif, json.dumps(to_sarif(run), indent=2))
+    if codequality:
+        put(codequality, json.dumps(to_codequality(run), indent=2))
+    md = None
+    if markdown:
+        md = render_markdown(run, report_url=report_url)
+        put(markdown, md)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    want_summary = run.cfg.report.job_summary if summary is None else summary
+    if want_summary and step_summary:
+        # the job summary allows 1 MiB, so it carries every new-finding prompt
+        text = render_markdown(run, report_url=report_url, max_prompts=50, limit=900_000)
+        with open(step_summary, "a", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+
+
+FAST_CHECKS = {
+    "hardcoded_secrets": "hardcoded secret / API key",
+    "pii_in_logs": "personal data written to logs",
+    "identifiers_hardcoded": "personal identifier (Aadhaar, PAN, phone, email, card) in code",
+}
+
+
+def _staged_files() -> list[str]:
+    import subprocess
+
+    try:
+        out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+                             capture_output=True, text=True, check=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line for line in out.splitlines() if line.strip()]
+
+
+@app.command()
+def precommit(
+    files: list[str] = typer.Argument(None, help="Files to check (default: staged files)."),
+    max_kb: int = typer.Option(512, help="Skip files larger than this."),
+) -> None:
+    """Fast local check for pre-commit: secrets, PII in logs and Indian ID patterns, staged files only.
+
+    Exit 1 if anything is found. Honours `privtrace-ignore` comments. Cross-file data flows are not
+    followed in this mode; CI runs the full scan.
+    """
+    import shutil
+    import tempfile
+    from datetime import date
+
+    from privtrace.ci.suppress import find_suppressions
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.findings import SourceCache
+    from privtrace.models.enums import RuleStatus
+    from privtrace.rules.registry import get_check
+    from privtrace.scanner.analyze import analyze_path
+
+    _utf8_stdout()
+    install_log_redaction()
+    paths = [f.replace("\\", "/") for f in (files or _staged_files())]
+    tmp = Path(tempfile.mkdtemp(prefix="privtrace-precommit-"))
+    try:
+        copied = 0
+        for rel in paths:
+            src_path = Path(rel)
+            if not src_path.is_file() or src_path.is_absolute() or ".." in src_path.parts:
+                continue
+            if src_path.stat().st_size > max_kb * 1024:
+                continue
+            dest = tmp / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src_path, dest)
+            copied += 1
+        if not copied:
+            raise typer.Exit(0)
+        facts = analyze_path(tmp, root_name="staged")
+        sups = find_suppressions(SourceCache(tmp), facts.files, date.today())
+        problems: list[str] = []
+        for det, label in FAST_CHECKS.items():
+            outcome = get_check(det)(facts, {})
+            if outcome.status != RuleStatus.failed:
+                continue
+            for e in outcome.evidence:
+                if any(s.state == "active" and s.file == e.file and e.line in s.covers for s in sups):
+                    continue
+                problems.append(f"{e.file}:{e.line}: {label} ({e.detail})")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if problems:
+        typer.echo("PrivTrace found problems in staged files:", err=True)
+        for p in problems:
+            typer.echo(f"  {p}", err=True)
+        typer.echo('Fix them, or add `# privtrace-ignore: RULE-ID reason="..."` if this is intended.', err=True)
+        raise typer.Exit(1)
+
+
+@baseline_app.command("update")
+def baseline_update(
+    target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Repository root."),
+    config: Path | None = typer.Option(None, help="Config file (default: <target>/.privtrace.yml)."),
+    out: Path | None = typer.Option(None, help="Baseline file (default: baseline.file from the config)."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Scan the repository and write the baseline: today's findings become 'existing'.
+
+    Commit the file. In CI, only findings that are not in it count as new.
+    """
+    from privtrace.ci.baseline import baseline_from_result, write_baseline
+    from privtrace.ci.config import ConfigError
+    from privtrace.ci.gitutil import head_commit
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.scan import run_scan
+
+    install_log_redaction()
+    root = target.resolve()
+    try:
+        all_packs = load_packs(packs_dir)
+        cfg = resolve_config(root, config, all_packs, required=True)
+        result, _ = run_scan(root, cfg.packs, packs_dir=packs_dir, config=cfg, prompts=False, fixes=False)
+    except (ConfigError, PackLoadError) as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    dest = out or (root / cfg.baseline.file)
+    write_baseline(baseline_from_result(result, source="file", commit=head_commit(root)), dest)
+    score = "n/a" if result.overall_score is None else f"{result.overall_score:.0f}"
+    console.print(f"[green]wrote {dest}[/green] · {len(result.findings)} finding(s) recorded · overall score {score}")
+    console.print("The baseline contains fingerprints, rule ids, paths and scores only: no code.")
+
+
+@app.command()
+def init(
+    path: Path = typer.Option(Path(".privtrace.yml"), "--path", help="Where to write the config."),
+    packs: str | None = typer.Option(None, help="Comma-separated packs (skips the pack question)."),
+    answer: list[str] = typer.Option([], "--answer", help="RULE_ID=yes|no|not_sure (repeatable, skips that question)."),
+    skip_checklist: bool = typer.Option(False, "--skip-checklist", help="Do not ask the manual checklist questions."),
+    min_score: float | None = typer.Option(None, help="Overall score threshold for the gate."),
+    fail_on: str | None = typer.Option(None, help="critical|high|medium|low|none"),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing file."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Create .privtrace.yml: pick packs and walk through the manual checklist once."""
+    from privtrace.ci.config import ConfigError, render_config
+    from privtrace.models.enums import CheckType, ManualAnswerValue
+    from privtrace.packs.loader import resolve_pack_ids
+
+    _utf8_stdout()
+    if path.exists() and not force:
+        console.print(f"[red]error:[/red] {path} already exists (use --force to overwrite).")
+        raise typer.Exit(2)
+    try:
+        all_packs = load_packs(packs_dir)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    interactive = packs is None
+    if packs is None:
+        console.rule("PrivTrace init")
+        for p in all_packs.values():
+            console.print(f"  [bold]{p.id}[/bold]  {escape(p.name)} [dim]({p.jurisdiction}, {len(p.rules)} rules)[/dim]")
+        packs = typer.prompt("Which packs apply to this repository? (comma-separated)",
+                             default="dpdp-2023,certin-2022,security-baseline")
+    try:
+        ids = resolve_pack_ids(packs.split(","), all_packs)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    given = _load_answers(None, answer)
+    answers: dict[str, ManualAnswerValue] = {}
+    questions: dict[str, str] = {}
+    choices = {"y": "yes", "yes": "yes", "n": "no", "no": "no", "?": "not_sure", "not_sure": "not_sure",
+               "not sure": "not_sure", "s": "", "skip": "", "": ""}
+    asked = False
+    for pid in ids:
+        for rule in all_packs[pid].rules:
+            if rule.check_type == CheckType.automated or not rule.question:
+                continue
+            questions[rule.id] = rule.question
+            if rule.id in given:
+                answers[rule.id] = given[rule.id]
+                continue
+            if skip_checklist:
+                continue
+            if not asked:
+                console.print("\nManual checklist: answer y / n / ? (not sure), or press Enter to skip.")
+                asked = True
+            while True:
+                raw = typer.prompt(f"[{rule.id}] {rule.question}", default="", show_default=False).strip().lower()
+                if raw in choices:
+                    break
+                console.print("  please answer y, n, ? or press Enter")
+            if choices[raw]:
+                answers[rule.id] = ManualAnswerValue(choices[raw])
+
+    if min_score is None:
+        min_score = float(typer.prompt("Minimum overall score for the gate", default="70")) if interactive else 70.0
+    fail_on = (fail_on or "high").lower()
+    if fail_on not in ("critical", "high", "medium", "low", "none"):
+        raise typer.BadParameter("--fail-on must be critical, high, medium, low or none")
+    try:
+        text = render_config(ids, answers, questions, min_score=min_score, fail_on=fail_on)
+    except ConfigError as e:  # pragma: no cover - render_config validates its own output
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    path.write_text(text, encoding="utf-8")
+    console.print(f"[green]wrote {path}[/green] · packs: {', '.join(ids)} · {len(answers)} checklist answer(s)")
+    console.print("Next: commit it, then `privtrace baseline update` and add the workflow from "
+                  "examples/github/privtrace.yml.")
 
 
 @app.command()

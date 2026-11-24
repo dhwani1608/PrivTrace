@@ -75,7 +75,25 @@ export interface RuleResult {
   question: string | null;
   manual_answer: Answer | null;
   fix_diff: string | null;
+  fix_prompt?: string | null;
+  fix_prompt_ai_enriched?: boolean;
   ai: AIEnrichment | null;
+}
+
+export interface Finding {
+  id: string;
+  fingerprint: string;
+  pack_id: string;
+  rule_id: string;
+  title: string;
+  severity: Severity;
+  status: Status;
+  file: string;
+  line: number;
+  function: string;
+  snippet: string;
+  detail: string;
+  fix_prompt: string | null;
 }
 
 export interface Coverage {
@@ -148,6 +166,33 @@ export interface ScanResult {
   ai_model: string | null;
   ai_classifications: { name: string; category: string; reason: string; file: string | null; line: number | null }[];
   diff: ScanDiff | null;
+  findings?: Finding[];
+  file_prompts?: Record<string, string>;
+  fix_all_prompt?: string | null;
   scoring_formula: string;
   disclaimer: string;
+}
+
+export interface CiRun {
+  id: string;
+  received_at: string;
+  repo: string;
+  ref: string | null;
+  sha: string | null;
+  pr_number: number | null;
+  provider: string;
+  passed: boolean;
+  overall_score: number | null;
+  overall_delta: number | null;
+  new: number;
+  fixed: number;
+  packs: { pack_id: string; short_name: string; score: number | null; delta: number | null }[];
+  reasons: string[];
+  run_url: string | null;
+}
+
+export interface CiRepo {
+  repo: string;
+  runs: number;
+  last: CiRun;
 }

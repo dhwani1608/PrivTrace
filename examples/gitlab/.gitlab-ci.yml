@@ -1,0 +1,37 @@
+# PrivTrace compliance gate for GitLab CI. Add this job to your .gitlab-ci.yml.
+# Merge requests get a Code Quality report (shown in the MR widget) and the job fails when the
+# gate fails. Exit codes: 0 passed, 1 gate failed, 2 config or scan error.
+privtrace:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    GIT_DEPTH: "0"            # full history, to compare with the target branch
+    PRIVTRACE_REF: "main"     # PrivTrace version to install (pin a tag in production)
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null
+    - git clone --quiet --depth 1 --branch "$PRIVTRACE_REF" https://github.com/dhwani1608/PrivTrace.git /opt/privtrace
+    - pip install --quiet /opt/privtrace/backend
+    - export PRIVTRACE_PACKS_DIR=/opt/privtrace/packs
+  script:
+    - |
+      BASE_ARGS=""
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        BASE_ARGS="--base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      fi
+      privtrace ci . $BASE_ARGS \
+        --gitlab-codequality gl-code-quality-report.json \
+        --json privtrace.json --markdown privtrace.md --html privtrace-report.html
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
+    paths:
+      - privtrace-report.html
+      - privtrace.json
+      - privtrace.md
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"

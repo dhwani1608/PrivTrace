@@ -222,7 +222,10 @@ def _erasure(sf: SourceFile, ev: Evidence, facts: CodeFacts) -> set[str]:
             lines.append(f"{indent}delete_user_files({uid})  # remove exports/uploads written for this user")
         elif kind == SinkKind.db_write:
             lines.append(f'{indent}db.execute(text("DELETE FROM users WHERE id = :uid"), {{"uid": {uid}}})')
-    sf.insert_after_line(last.end_lineno, "\n".join(lines) + "\n")
+    if isinstance(last, ast.Return) and last.lineno > fn.body[0].lineno:
+        sf.insert_after_line(last.lineno - 1, "\n".join(lines) + "\n")  # before the return, not after it
+    else:
+        sf.insert_after_line(last.end_lineno, "\n".join(lines) + "\n")
     return set()
 
 

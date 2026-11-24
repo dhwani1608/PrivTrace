@@ -299,3 +299,37 @@ def test_zip_slip_rejected(tmp_path):
         zf.writestr("../evil.py", "x = 1")
     with workspace() as d, pytest.raises(FetchError):
         extract_zip(z, d)
+
+
+def test_model_dump_exclude_and_include_are_respected(tmp_path):
+    """`model_dump(exclude={"password"})` must not be reported as logging the password."""
+    root = make_repo(tmp_path, {"app.py": textwrap.dedent('''
+        import logging
+        from fastapi import FastAPI
+        from pydantic import BaseModel
+
+        logger = logging.getLogger("x")
+        app = FastAPI()
+
+        class SignupRequest(BaseModel):
+            email: str
+            password: str
+
+        @app.post("/a")
+        def a(req: SignupRequest):
+            payload = req.model_dump(exclude={"password"})
+            logger.info(f"signup {payload}")
+
+        @app.post("/b")
+        def b(req: SignupRequest):
+            logger.info("b %s", req.model_dump(include={"email"}))
+
+        @app.post("/c")
+        def c(req: SignupRequest, fields: set):
+            logger.info("c %s", req.model_dump(exclude=fields))
+    ''')})
+    facts = analyze_path(root)
+    names = {s.function: {t.name.rsplit(".", 1)[-1] for t in s.taints} for s in pii_sinks(facts, SinkKind.log)}
+    assert "password" not in names["a"] and "email" in names["a"]
+    assert names["b"] == {"email"} or ("password" not in names["b"] and "email" in names["b"])
+    assert "password" in names["c"]  # dynamic exclusion is not trusted

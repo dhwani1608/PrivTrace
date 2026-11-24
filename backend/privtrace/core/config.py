@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     max_snippet_lines: int = Field(default=40, alias="PRIVTRACE_MAX_SNIPPET_LINES")
     max_upload_mb: int = Field(default=50, alias="PRIVTRACE_MAX_UPLOAD_MB")
 
+    # Shared secret for `privtrace ci --upload` (dashboard history). Unset = uploads disabled.
+    ci_upload_token: str | None = Field(default=None, alias="PRIVTRACE_CI_TOKEN")
+
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],
         alias="PRIVTRACE_CORS_ORIGINS",

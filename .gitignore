@@ -33,3 +33,6 @@ Thumbs.db
 
 # TypeScript build info
 *.tsbuildinfo
+
+# PrivTrace CI demo output (scripts/demo_ci.sh)
+demo-ci-output/

@@ -37,6 +37,74 @@ function CopyLoc({ text }: { text: string }) {
   );
 }
 
+// ------------------------------------------------------------------ AI fix prompts (copy + preview)
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return; } catch { /* fall back below */ }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(ta);
+  if (!ok) throw new Error("copy failed");
+}
+
+function useCopy(): [boolean, (text: string) => void] {
+  const [ok, setOk] = useState(false);
+  const copy = (text: string) => { copyText(text).then(() => { setOk(true); setTimeout(() => setOk(false), 1500); }).catch(() => {}); };
+  return [ok, copy];
+}
+
+function PromptModal({ title, text, enriched, onClose }: { title: string; text: string; enriched?: boolean; onClose: () => void }) {
+  const [ok, copy] = useCopy();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm" onClick={onClose} role="presentation">
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}
+        className="glass flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/[.06] px-5 py-3">
+          <Icon name="sparkle" size={16} className="text-violet-300" />
+          <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold text-white">{title}</h3>
+          {enriched && <span className="badge bg-violet-500/20 text-violet-200">AI-enriched</span>}
+          <button type="button" className={ok ? "btn-ghost text-lime" : "btn-primary"} onClick={() => copy(text)}>{ok ? "Copied ✓" : "Copy prompt"}</button>
+          <button type="button" className="btn-ghost" onClick={onClose} aria-label="Close preview">Close</button>
+        </div>
+        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words bg-ink-950/70 p-5 font-mono text-xs leading-relaxed text-zinc-200">{text}</pre>
+        <p className="border-t border-white/[.06] px-5 py-2 text-[11px] text-zinc-500">Paste into Claude, Cursor, Copilot, ChatGPT or any AI coding tool. Code is redacted and capped; the prompt contains no real identifiers.</p>
+      </div>
+    </div>
+  );
+}
+
+function PromptActions({ text, label, title, enriched, compact }: { text: string; label: string; title: string; enriched?: boolean; compact?: boolean }) {
+  const [ok, copy] = useCopy();
+  const [open, setOpen] = useState(false);
+  const small = "rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition";
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <button type="button" onClick={(e) => { e.stopPropagation(); copy(text); }}
+        className={compact ? `${small} ${ok ? "bg-lime/15 text-lime ring-lime/30" : "bg-violet-500/15 text-violet-200 ring-violet-400/30 hover:bg-violet-500/25"}` : ok ? "btn-ghost text-lime" : "btn-violet"}>
+        {!compact && <Icon name="sparkle" size={15} />}{ok ? "Copied ✓" : label}
+      </button>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        className={compact ? `${small} text-zinc-400 ring-white/10 hover:text-white` : "btn-ghost"}>
+        {!compact && <Icon name="eye" size={15} />}Preview
+      </button>
+      {enriched && !compact && <span className="badge bg-violet-500/15 text-violet-200">AI-enriched</span>}
+      {open && <PromptModal title={title} text={text} enriched={enriched} onClose={() => setOpen(false)} />}
+    </span>
+  );
+}
+
 // ------------------------------------------------------------------ hotspots (where it breaks)
 type Hit = { r: RuleResult; line: number; snippet: string; detail: string };
 type Hotspot = { file: string; hits: Hit[]; failed: number; review: number; worst: Severity };
@@ -55,7 +123,7 @@ function useHotspots(results: RuleResult[]): Hotspot[] {
   }, [results]);
 }
 
-function HotspotsView({ spots, packName, onOpen }: { spots: Hotspot[]; packName: (id: string) => string; onOpen: (r: RuleResult) => void }) {
+function HotspotsView({ spots, packName, onOpen, filePrompts }: { spots: Hotspot[]; packName: (id: string) => string; onOpen: (r: RuleResult) => void; filePrompts: Record<string, string> }) {
   const [open, setOpen] = useState<Set<string>>(() => new Set(spots.slice(0, 2).map((s) => s.file)));
   const max = Math.max(1, ...spots.map((s) => s.hits.length));
   const toggle = (f: string) => setOpen((o) => { const n = new Set(o); n.has(f) ? n.delete(f) : n.add(f); return n; });
@@ -69,7 +137,8 @@ function HotspotsView({ spots, packName, onOpen }: { spots: Hotspot[]; packName:
           const isOpen = open.has(s.file);
           return (
             <div key={s.file} className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-white/10 bg-white/[.035]" : "border-white/[.06] bg-white/[.015] hover:bg-white/[.03]"}`}>
-              <button onClick={() => toggle(s.file)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+              <div className="flex items-center">
+              <button onClick={() => toggle(s.file)} aria-expanded={isOpen} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.failed ? SEV_DOT[s.worst] : "bg-sun"}`} />
                 <Icon name="file" size={16} className="shrink-0 text-zinc-500" />
                 <span className="min-w-0 flex-1 truncate font-mono text-sm"><span className="text-zinc-500">{dir}</span><span className="text-white">{base}</span></span>
@@ -81,6 +150,8 @@ function HotspotsView({ spots, packName, onOpen }: { spots: Hotspot[]; packName:
                 {s.review > 0 && <span className="hidden rounded-full bg-sun/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-sun sm:inline">{s.review} review</span>}
                 <Icon name="chevron" size={16} className={`shrink-0 text-zinc-500 transition ${isOpen ? "rotate-90" : ""}`} />
               </button>
+              {filePrompts[s.file] && <span className="hidden shrink-0 pr-4 sm:inline-flex"><PromptActions compact text={filePrompts[s.file]} label="Copy prompt for this file" title={`Fix all PrivTrace findings in ${s.file}`} /></span>}
+              </div>
               {isOpen && (
                 <ul className="border-t border-white/[.06] bg-ink-950/50">
                   {s.hits.map((h, i) => (
@@ -211,6 +282,12 @@ function FindingDetail({ r, packLabel, pos, onPrev, onNext }: {
 
         <Block tone="bg-lime/15 text-lime" icon="check" label="04 · How" title={ok ? "Keep it this way" : "How to fix it"}>
           <p className="leading-relaxed">{r.remediation}</p>
+          {r.fix_prompt && (
+            <div className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-500/[.06] p-3.5">
+              <div className="mb-2 text-xs text-zinc-400">Hand it to your AI coding tool: a ready-made, redacted prompt with the location, data flow and what a correct fix looks like.</div>
+              <PromptActions text={r.fix_prompt} label="Copy AI fix prompt" title={`${r.rule_id} · fix prompt`} enriched={r.fix_prompt_ai_enriched} />
+            </div>
+          )}
           {r.fix_diff ? (
             <div className="mt-3"><div className="mb-2 text-xs text-zinc-500">Suggested change · template-generated — review before applying</div><Diff text={r.fix_diff} /></div>
           ) : r.ai && (r.ai.suggested_diff || r.ai.suggested_fix) ? (
@@ -292,7 +369,7 @@ function FrameworkView({ pack, results, selected, onSelect }: {
       </div>
 
       {/* list + detail */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <ul className="space-y-1.5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
           {!list.length && <li className="glass-tile p-4 text-sm text-zinc-500">Nothing matches.</li>}
           {list.map((r) => {
@@ -322,7 +399,7 @@ function FrameworkView({ pack, results, selected, onSelect }: {
             );
           })}
         </ul>
-        <div className="hidden lg:block">{detail}</div>
+        <div className="hidden min-w-0 lg:block">{detail}</div>
       </div>
     </div>
   );
@@ -411,6 +488,7 @@ export default function Report({ result, canRescan, onRescan, onUploadFixed, onN
           {canRescan
             ? <button className="btn-primary" onClick={onRescan}><Icon name="refresh" size={16} /> Rescan after fixes</button>
             : <button className="btn-primary" onClick={onUploadFixed}><Icon name="upload" size={16} /> Upload fixed version</button>}
+          {result.fix_all_prompt && <PromptActions text={result.fix_all_prompt} label="Copy fix-all prompt" title="Fix the top PrivTrace findings" />}
           <a className="btn-violet" href={api.reportPdfUrl(result.scan_id)} download={`privtrace-${result.scan_id}.pdf`}><Icon name="file" size={15} /> PDF report</a>
           <a className="btn-ghost" href={api.reportHtmlUrl(result.scan_id, true)}><Icon name="download" size={15} /> HTML</a>
           <a className="btn-ghost" href={api.reportJsonUrl(result.scan_id)} download={`privtrace-${result.scan_id}.json`}><Icon name="download" size={15} /> JSON</a>
@@ -423,7 +501,7 @@ export default function Report({ result, canRescan, onRescan, onUploadFixed, onN
         <p><b className="text-sun">Not legal advice.</b> {result.disclaimer}</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
         {/* sidebar tabs */}
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <nav aria-label="Report sections" className="glass flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-visible lg:p-3">
@@ -577,7 +655,7 @@ export default function Report({ result, canRescan, onRescan, onUploadFixed, onN
             </div>
           )}
 
-          {view === "hotspots" && <HotspotsView spots={spots} packName={packName} onOpen={openFinding} />}
+          {view === "hotspots" && <HotspotsView spots={spots} packName={packName} onOpen={openFinding} filePrompts={result.file_prompts ?? {}} />}
 
           {view === "flow" && (
             <section className="glass p-5 sm:p-6">

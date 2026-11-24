@@ -1,0 +1,37 @@
+{% import "_macros.md.j2" as m %}
+# Fix all PrivTrace findings in `{{ file }}`
+
+## 1. Role and task
+You are fixing data-protection issues in this codebase. A deterministic code scanner (PrivTrace) flagged {{ items|length }} problem(s) in `{{ file }}`. Fix them together in one change so the edits do not conflict. Work through them in the order listed. Explain your changes briefly when you are done.
+
+{% for item in items %}
+---
+
+## Finding {{ loop.index }} of {{ items|length }}: {{ item.headline }}
+
+### 2. The problem
+{{ m.problem(item) }}
+
+### 3. Location
+{{ m.locations(item) }}
+
+### 4. Code context
+{{ m.code(item) }}
+
+### 5. Data-flow context
+{{ m.flow(item) }}
+
+### 6. What a correct fix looks like
+{% include item.criteria_template %}
+
+{% endfor %}
+---
+
+## 7. Constraints
+{{ m.constraints(constraints) }}
+
+## 8. How to verify
+{{ m.verify(rule_ids, verify_cmd) }}
+
+## 9. Disclaimer
+{{ disclaimer }}
