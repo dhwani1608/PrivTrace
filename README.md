@@ -2,7 +2,7 @@
 
 **Multi-framework compliance scanner for codebases.** PrivTrace scans your code against the compliance packs you pick (India's DPDP Act 2023, IT Act/SPDI Rules, CERT-In Directions, a GDPR subset, an OWASP-style security baseline), traces where personal data flows (DB, logs, LLM prompts, vector stores, caches, third-party APIs), and produces a scored report with file:line evidence and concrete fixes.
 
-**Live app:** [privtrace-836138728232.asia-south1.run.app](https://privtrace-836138728232.asia-south1.run.app)
+**Live app:** [privtrace-836138728232.asia-south1.run.app](https://privtrace-836138728232.asia-south1.run.app) · **CI demo:** [acme-chatbot-demo](https://github.com/dhwani1608/acme-chatbot-demo) (a PR blocked by the gate, with fix prompts)
 
 > PrivTrace findings are engineering evidence, **not legal advice**. Rule results are "passed / failed / needs review", never a legal verdict.
 
@@ -71,6 +71,8 @@ privtrace verify --config ../demo/verify-demo-app-fixed.yaml  # PASS on every st
 Only run Verify against local/test deployments you own: it writes test data.
 
 ## Use in CI
+
+See it live: [acme-chatbot-demo](https://github.com/dhwani1608/acme-chatbot-demo): a harmless PR passes, [a PR that leaks PII](https://github.com/dhwani1608/acme-chatbot-demo/pull/2) is blocked, and [the fixed version](https://github.com/dhwani1608/acme-chatbot-demo/pull/3) passes.
 
 Block pull requests that introduce personal-data problems, with a sticky PR comment that has a
 copy-paste AI fix prompt for every new finding:

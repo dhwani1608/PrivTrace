@@ -5,6 +5,7 @@ LLM. PrivTrace blocks the merge, tells them exactly where and why, and hands the
 AI coding tool can apply. They fix it, push again, and the gate goes green.*
 
 Everything runs locally: no GitHub, no network. AI is off in the demo config.
+The same story on real GitHub: <https://github.com/dhwani1608/acme-chatbot-demo> ([passing PR](https://github.com/dhwani1608/acme-chatbot-demo/pull/1), [blocked PR](https://github.com/dhwani1608/acme-chatbot-demo/pull/2), [fixed PR](https://github.com/dhwani1608/acme-chatbot-demo/pull/3)).
 For the web UI part of a demo, use the live app: <https://privtrace-836138728232.asia-south1.run.app>.
 
 ## Before you start (once)
