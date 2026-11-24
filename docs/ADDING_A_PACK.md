@@ -27,7 +27,15 @@ rules:
     why_it_matters: Plain language, for developers.
     remediation: What to change.
     tags: [logging]
+    fix_prompt_hints:                # optional: extra guidance added to AI fix prompts
+      - "Never log request.body() or whole payloads; log user_id instead."
 ```
+
+`fix_prompt_hints` (optional, list of strings) is rule-specific guidance that PrivTrace adds to
+section 6 ("What a correct fix looks like") of every copy-paste AI fix prompt for this rule, e.g.
+"use argon2 or bcrypt, never plain SHA-256" or "the delete path must also cover Redis keys
+`user:{id}:*` and pgvector rows". Keep each hint one sentence, concrete, and free of real data.
+See `docs/FIX_PROMPTS.md`.
 
 Validation rejects: missing/empty `reference`, duplicate rule ids, automated rules without a `detector`, manual rules without a `question`, and any `detector` that is not registered.
 

@@ -53,8 +53,34 @@ class RuleResult(BaseModel):
     question: str | None = None
     manual_answer: ManualAnswerValue | None = None
     fix_diff: str | None = None
+    fix_prompt: str | None = Field(default=None, description="Copy-paste prompt for an AI coding tool (redacted).")
+    fix_prompt_ai_enriched: bool = False
     ai: AIEnrichment | None = None
     tags: list[str] = Field(default_factory=list)
+
+
+class Finding(BaseModel):
+    """One failed / needs-review rule at one code location (see privtrace/findings.py)."""
+
+    id: str = Field(description="Short id (first 10 chars of the fingerprint), used by `privtrace prompt`.")
+    fingerprint: str
+    pack_id: str
+    rule_id: str
+    title: str
+    severity: Severity
+    status: RuleStatus
+    file: str = ""
+    line: int = 0
+    function: str = "<module>"
+    snippet: str = ""  # the redacted source line
+    detail: str = ""
+    fix_prompt: str | None = None
+
+    @property
+    def location(self) -> str:
+        if not self.file:
+            return "(no code location)"
+        return f"{self.file}:{self.line}" if self.line else self.file
 
 
 class Coverage(BaseModel):
@@ -103,5 +129,11 @@ class ScanResult(BaseModel):
     ai_model: str | None = None
     ai_classifications: list[dict] = Field(default_factory=list)
     diff: dict | None = None
+    # v2: per-location findings with fingerprints, fix prompts, and what config/suppressions changed.
+    findings: list[Finding] = Field(default_factory=list)
+    file_prompts: dict[str, str] = Field(default_factory=dict)
+    fix_all_prompt: str | None = None
+    suppressions: list[dict] = Field(default_factory=list)
+    disabled_rules: list[dict] = Field(default_factory=list)
     scoring_formula: str = ""
     disclaimer: str = ""

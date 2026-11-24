@@ -8,6 +8,9 @@ from pathlib import Path
 
 from privtrace import DISCLAIMER
 from privtrace.ai.gateway import AIGateway
+from privtrace.core.config import get_settings
+from privtrace.findings import SourceCache, extract_findings
+from privtrace.fixprompt import PromptBuilder, attach_prompts
 from privtrace.models.enums import ManualAnswerValue
 from privtrace.models.results import ScanResult, ScanSummary
 from privtrace.packs.loader import load_packs, resolve_pack_ids
@@ -30,6 +33,8 @@ def run_scan(
     facts: CodeFacts | None = None,
     baseline: ScanResult | None = None,
     fixes: bool = True,
+    prompts: bool = True,
+    verify_cmd: str | None = None,
     ai: AIGateway | None = None,
     on_stage: Callable[[str], None] | None = None,
 ) -> tuple[ScanResult, CodeFacts]:
@@ -54,6 +59,14 @@ def run_scan(
         # Structural guarantee (AIEnrichment has no status) + belt-and-braces check.
         if [(r.rule_id, r.status) for r in results] != before:
             raise RuntimeError("AI enrichment changed a rule status")
+    src = SourceCache(root)
+    findings = extract_findings(results, src)
+    file_prompts: dict[str, str] = {}
+    fix_all: str | None = None
+    if prompts:
+        builder = PromptBuilder(packs, facts, src, ids, max_lines=get_settings().max_snippet_lines,
+                                verify_cmd=verify_cmd)
+        file_prompts, fix_all = attach_prompts(results, findings, builder)
     scores = [score_pack(p, results) for p in packs]
     graph = build_graph(facts.sinks)
 
@@ -75,6 +88,9 @@ def run_scan(
         ),
         data_flow={**graph.model_dump(), "mermaid": graph.to_mermaid()},
         manual_answers={k: v for k, v in answers.items()},
+        findings=findings,
+        file_prompts=file_prompts,
+        fix_all_prompt=fix_all,
         scoring_formula=SCORING_FORMULA,
         disclaimer=DISCLAIMER,
     )

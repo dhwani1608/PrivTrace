@@ -1,0 +1,29 @@
+{% import "_macros.md.j2" as m %}
+# Fix a data-protection finding: {{ item.headline }}
+
+## 1. Role and task
+You are fixing a data-protection issue in this codebase. A deterministic code scanner (PrivTrace) flagged the code below. Change the code so it meets the criteria in section 6, within the constraints in section 7. Explain your change briefly when you are done.
+
+## 2. The problem
+{{ m.problem(item) }}
+
+## 3. Location
+{{ m.locations(item) }}
+
+## 4. Code context
+{{ m.code(item) }}
+
+## 5. Data-flow context
+{{ m.flow(item) }}
+
+## 6. What a correct fix looks like
+{% include item.criteria_template %}
+
+## 7. Constraints
+{{ m.constraints(constraints) }}
+
+## 8. How to verify
+{{ m.verify(item.rule_ids, verify_cmd) }}
+
+## 9. Disclaimer
+{{ disclaimer }}
