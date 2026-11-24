@@ -68,6 +68,32 @@ privtrace verify --config ../demo/verify-demo-app-fixed.yaml  # PASS on every st
 
 Only run Verify against local/test deployments you own: it writes test data.
 
+## Use in CI
+
+Block pull requests that introduce personal-data problems, with a sticky PR comment that has a
+copy-paste AI fix prompt for every new finding:
+
+```yaml
+- uses: actions/checkout@v4
+  with: { fetch-depth: 0 }
+- uses: dhwani1608/PrivTrace@main     # reads .privtrace.yml (create it with `privtrace init`)
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with: { sarif_file: privtrace-report/privtrace.sarif }
+```
+
+`privtrace ci --base origin/main` exits **0** (passed), **1** (gate failed) or **2** (config/scan
+error). Pass/fail is deterministic; with AI off (the default) no code leaves the runner. Full
+workflow: [`examples/github/privtrace.yml`](examples/github/privtrace.yml). Docs:
+[CI integration](docs/CI_INTEGRATION.md) · [AI fix prompts](docs/FIX_PROMPTS.md) ·
+[2-minute CI demo](docs/DEMO_SCRIPT_CI.md) (`bash scripts/demo_ci.sh`).
+
+```bash
+privtrace prompt DPDP-SEC-02            # AI fix prompt for one rule (or a finding id)
+privtrace prompt --file app/main.py     # every finding in one file
+privtrace prompt --all --top 10         # batch prompt, by severity
+```
+
 ## Build status
 
 Built milestone by milestone (see [PLAN.md](PLAN.md)).
@@ -84,6 +110,7 @@ Built milestone by milestone (see [PLAN.md](PLAN.md)).
 | 8 | IT Act/SPDI, CERT-In, GDPR packs | ✅ |
 | 9 | Demo app (score 6) + fixed version (score 100) + E2E test | ✅ |
 | 10 | Stretch: Verify (canary deletion test across Postgres/pgvector, Redis, logs) | ✅ |
+| v2 | AI fix prompts + CI compliance gate (see [PLAN-v2.md](PLAN-v2.md)) | ✅ |
 
 ## Repo layout
 
@@ -94,5 +121,10 @@ frontend/            React + Vite + TS + Tailwind UI
 demo-app/            deliberately non-compliant RAG chatbot (fake data only)
 demo-app-fixed/      the same app with fixes applied
 demo/                docker-compose + Verify configs for the demo apps
-docs/                ARCHITECTURE, SCORING, LEGAL_REVIEW_TODO, DEPLOY_GCP, ADDING_A_PACK, DETECTION_LIMITS
+demo-repos/          acme-chatbot: CI demo repo (.privtrace.yml + workflow)
+examples/            CI templates: GitHub Actions, GitLab, generic shell
+scripts/             demo_ci.sh + the demo's change patches
+action.yml           the GitHub Action (composite)
+docs/                ARCHITECTURE, SCORING, LEGAL_REVIEW_TODO, DEPLOY_GCP, ADDING_A_PACK, DETECTION_LIMITS,
+                     CI_INTEGRATION, FIX_PROMPTS, DEMO_SCRIPT_CI
 ```
