@@ -118,14 +118,21 @@ def print_summary(result) -> None:
                       f"fixed {len(d['fixed'])}, new failures {len(d['regressed'])}")
     failed = [r for r in result.results if r.status == RuleStatus.failed]
     failed.sort(key=lambda r: -r.severity.rank)
+    ids = {(f.rule_id, f.file, f.line): f.id for f in getattr(result, "findings", [])}
     for r in failed:
         console.print()
         console.print(f"[red]✗[/red] [bold]{r.rule_id}[/bold] ({r.severity.value}) {escape(r.title)}")
         console.print(f"  {escape(r.message)}")
         for e in r.evidence[:5]:
-            console.print(f"  [cyan]{escape(e.file)}:{e.line}[/cyan] {escape(e.detail)}")
+            fid = ids.get((r.rule_id, e.file, e.line))
+            tag = f" [dim]id {fid}[/dim]" if fid else ""
+            console.print(f"  [cyan]{escape(e.file)}:{e.line}[/cyan] {escape(e.detail)}{tag}")
         if len(r.evidence) > 5:
             console.print(f"  [dim]… {len(r.evidence) - 5} more[/dim]")
+    if failed:
+        console.print()
+        console.print("[dim]AI fix prompts: `privtrace prompt <id>`, `privtrace prompt <RULE-ID>`, "
+                      "`privtrace prompt --file <path>` or `privtrace prompt --all`.[/dim]")
     console.print()
     console.print(f"[dim]{result.disclaimer}[/dim]")
 
@@ -199,6 +206,127 @@ def scan(
         hist.write_text(result.model_dump_json(), encoding="utf-8")
     if fail_under is not None and (result.overall_score or 0) < fail_under:
         raise typer.Exit(1)
+
+
+def _utf8_stdout() -> None:
+    import sys
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):  # pragma: no cover - not a TextIOWrapper
+            pass
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Best effort: pbcopy / clip / wl-copy / xclip / xsel. Returns False if none worked."""
+    import shutil
+    import subprocess
+    import sys
+
+    candidates: list[tuple[list[str], bytes]] = []
+    if sys.platform == "darwin":
+        candidates.append((["pbcopy"], text.encode("utf-8")))
+    elif sys.platform.startswith("win"):
+        candidates.append((["clip"], b"\xff\xfe" + text.encode("utf-16-le")))
+    else:
+        candidates += [(["wl-copy"], text.encode()), (["xclip", "-selection", "clipboard"], text.encode()),
+                       (["xsel", "--clipboard", "--input"], text.encode())]
+    for cmd, data in candidates:
+        if shutil.which(cmd[0]) is None:
+            continue
+        try:
+            subprocess.run(cmd, input=data, check=True, timeout=5)
+            return True
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return False
+
+
+@app.command()
+def prompt(
+    finding: str | None = typer.Argument(None, help="Finding id (or fingerprint prefix) or a rule id like DPDP-SEC-02."),
+    target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Folder to scan."),
+    file: str | None = typer.Option(None, "--file", help="Print the prompt that fixes every finding in this file."),
+    all_: bool = typer.Option(False, "--all", help="Print the batch prompt for the top findings."),
+    top: int = typer.Option(10, help="With --all: how many findings to include."),
+    packs: str | None = typer.Option(None, help="Comma-separated packs (default: from .privtrace.yml, else dpdp,security)."),
+    config: Path | None = typer.Option(None, help="PrivTrace config (default: ./.privtrace.yml in the target if present)."),
+    copy: bool = typer.Option(False, "--copy", help="Also copy the prompt to the clipboard."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Print a copy-paste AI fix prompt (offline: no AI call is made).
+
+        privtrace prompt 3f2a9c1b0d
+        privtrace prompt DPDP-SEC-02
+        privtrace prompt --file app/routes.py
+        privtrace prompt --all --top 10 > fixes.md
+    """
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.fixprompt import PromptBuilder
+
+    install_log_redaction()
+    _utf8_stdout()
+    if sum(bool(x) for x in (finding, file, all_)) != 1:
+        raise typer.BadParameter("give exactly one of: a finding id / rule id, --file PATH, or --all")
+    root = target.resolve()
+    try:
+        result, facts, ctx = _scan_with_config(root, packs, config, packs_dir)
+    except PackLoadError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+
+    text: str | None = None
+    if all_:
+        builder: PromptBuilder = ctx["builder"]
+        by_rule = {(r.pack_id, r.rule_id): r for r in result.results}
+        pairs = [(by_rule[(f.pack_id, f.rule_id)], f) for f in result.findings]
+        text = builder.batch_prompt(pairs, top=top)
+        if text is None:
+            console.print("[green]No failed or needs-review findings: nothing to fix.[/green]")
+            raise typer.Exit(0)
+    elif file:
+        rel = file.replace("\\", "/")
+        while rel.startswith("./"):
+            rel = rel[2:]
+        text = result.file_prompts.get(rel)
+        if text is None:
+            console.print(f"[yellow]No findings in {escape(rel)}.[/yellow] Files with findings: "
+                          + ", ".join(sorted(result.file_prompts)) or "none")
+            raise typer.Exit(1)
+    else:
+        key = (finding or "").strip()
+        rule = next((r for r in result.results if r.rule_id.upper() == key.upper() and r.fix_prompt), None)
+        if rule is not None:
+            text = rule.fix_prompt
+        else:
+            matches = [f for f in result.findings if f.fingerprint.startswith(key.lower()) or f.id == key]
+            if len(matches) != 1:
+                console.print(f"[red]error:[/red] {'no' if not matches else 'more than one'} finding matches {escape(key)!r}. "
+                              "Use an id from `privtrace scan` / the JSON report, or a rule id.")
+                raise typer.Exit(1)
+            text = matches[0].fix_prompt
+    typer.echo(text, nl=False)
+    if copy:
+        if copy_to_clipboard(text or ""):
+            typer.echo("Copied to clipboard ✓", err=True)
+        else:
+            typer.echo("Clipboard not available here; the prompt is printed above.", err=True)
+
+
+def _scan_with_config(root: Path, packs: str | None, config: Path | None, packs_dir: Path | None):
+    """Scan for CLI helpers. Honours .privtrace.yml (packs, rules, paths, answers) when present."""
+    from privtrace.fixprompt import PromptBuilder
+    from privtrace.findings import SourceCache
+    from privtrace.packs.loader import load_packs as _load, resolve_pack_ids
+    from privtrace.scan import run_scan
+
+    pack_list = (packs or "dpdp,security").split(",")
+    result, facts = run_scan(root, pack_list, packs_dir=packs_dir)
+    all_packs = _load(packs_dir)
+    ids = resolve_pack_ids(pack_list, all_packs)
+    builder = PromptBuilder([all_packs[i] for i in ids], facts, SourceCache(root), ids)
+    return result, facts, {"builder": builder}
 
 
 @app.command()
