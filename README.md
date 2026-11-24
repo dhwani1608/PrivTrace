@@ -2,6 +2,8 @@
 
 **Multi-framework compliance scanner for codebases.** PrivTrace scans your code against the compliance packs you pick (India's DPDP Act 2023, IT Act/SPDI Rules, CERT-In Directions, a GDPR subset, an OWASP-style security baseline), traces where personal data flows (DB, logs, LLM prompts, vector stores, caches, third-party APIs), and produces a scored report with file:line evidence and concrete fixes.
 
+**Live app:** [privtrace-836138728232.asia-south1.run.app](https://privtrace-836138728232.asia-south1.run.app)
+
 > PrivTrace findings are engineering evidence, **not legal advice**. Rule results are "passed / failed / needs review", never a legal verdict.
 
 ## Quickstart
@@ -87,6 +89,9 @@ error). Pass/fail is deterministic; with AI off (the default) no code leaves the
 workflow: [`examples/github/privtrace.yml`](examples/github/privtrace.yml). Docs:
 [CI integration](docs/CI_INTEGRATION.md) · [AI fix prompts](docs/FIX_PROMPTS.md) ·
 [2-minute CI demo](docs/DEMO_SCRIPT_CI.md) (`bash scripts/demo_ci.sh`).
+
+To track scores over time in the live app's **CI history** view, add `upload-url: https://privtrace-836138728232.asia-south1.run.app` and
+`upload-token: ${{ secrets.PRIVTRACE_TOKEN }}` to the action (or pass `--upload` / `--token` to `privtrace ci`).
 
 ```bash
 privtrace prompt DPDP-SEC-02            # AI fix prompt for one rule (or a finding id)

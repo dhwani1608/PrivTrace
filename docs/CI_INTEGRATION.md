@@ -279,7 +279,7 @@ secret it found, and does not follow cross-file flows (CI does). It uses `langua
 
 ## Dashboard history
 
-Send each CI result to a PrivTrace server to see score trends per repository and branch, and the last
+The hosted PrivTrace app is at <https://privtrace-836138728232.asia-south1.run.app>. Send each CI result to it (or your own PrivTrace server) to see score trends per repository and branch, and the last
 10 PRs, in the web UI (**CI history** in the header):
 
 ```bash
@@ -287,7 +287,16 @@ Send each CI result to a PrivTrace server to see score trends per repository and
 PRIVTRACE_CI_TOKEN=<long random string>
 
 # in CI (store the same value as a secret)
-privtrace ci --base origin/main --upload https://your-privtrace.example --token "$PRIVTRACE_TOKEN"
+privtrace ci --base origin/main --upload https://privtrace-836138728232.asia-south1.run.app --token "$PRIVTRACE_TOKEN"
+```
+
+With the GitHub Action:
+
+```yaml
+- uses: dhwani1608/PrivTrace@main
+  with:
+    upload-url: https://privtrace-836138728232.asia-south1.run.app
+    upload-token: ${{ secrets.PRIVTRACE_TOKEN }}
 ```
 
 - The upload is the `--json` result (`CiReport`, `schema_version: 1`): scores, deltas, gate decision,

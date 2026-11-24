@@ -1,6 +1,8 @@
 # Deploying PrivTrace on Google Cloud
 
-Target layout (not deployed yet — this is the guide):
+**Live deployment:** <https://privtrace-836138728232.asia-south1.run.app> (Cloud Run, `asia-south1`: one service serving the UI and the API).
+
+Full target layout for a production setup:
 
 ```
 Cloud Run service  privtrace-api   (FastAPI, also serves report HTML/JSON)

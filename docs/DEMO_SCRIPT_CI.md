@@ -5,6 +5,7 @@ LLM. PrivTrace blocks the merge, tells them exactly where and why, and hands the
 AI coding tool can apply. They fix it, push again, and the gate goes green.*
 
 Everything runs locally: no GitHub, no network. AI is off in the demo config.
+For the web UI part of a demo, use the live app: <https://privtrace-836138728232.asia-south1.run.app>.
 
 ## Before you start (once)
 
