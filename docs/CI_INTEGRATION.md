@@ -279,6 +279,23 @@ secret it found, and does not follow cross-file flows (CI does). It uses `langua
 
 ## Dashboard history
 
-The `--json` output (`CiReport`, `schema_version: 1`) is designed as the upload payload for a future
-`privtrace ci --upload`: scores, deltas, gate decision, finding metadata and run context
-(provider, repo, ref, sha, PR number, run URL), and **no code**. See `backend/privtrace/ci/report.py`.
+Send each CI result to a PrivTrace server to see score trends per repository and branch, and the last
+10 PRs, in the web UI (**CI history** in the header):
+
+```bash
+# on the server (e.g. Cloud Run): enable uploads with a shared secret
+PRIVTRACE_CI_TOKEN=<long random string>
+
+# in CI (store the same value as a secret)
+privtrace ci --base origin/main --upload https://your-privtrace.example --token "$PRIVTRACE_TOKEN"
+```
+
+- The upload is the `--json` result (`CiReport`, `schema_version: 1`): scores, deltas, gate decision,
+  finding metadata (ids, rules, paths, lines, fingerprints) and run context (provider, repo, ref,
+  sha, PR number, run URL). **No code, snippets or prompts.**
+- The server re-validates it against the `CiReport` schema and drops unknown fields before storing
+  it, so a tampered upload can't store code either.
+- Without `PRIVTRACE_CI_TOKEN` on the server, uploads are refused (503). A wrong token gets 401.
+- `privtrace ci` only contacts the server when `--upload` is given. A failed upload prints a warning
+  and never changes the gate's exit code.
+- API: `POST /api/ci/runs` (Bearer token), `GET /api/ci/repos`, `GET /api/ci/runs?repo=…&ref=…`.

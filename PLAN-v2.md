@@ -92,15 +92,15 @@ template, `frontend/src/{types.ts,components/Report.tsx}`, `docs/ADDING_A_PACK.m
 
 ## 4. Milestones
 1. This plan + code reading ✅
-2. Fix prompt templates + generator + `fix_prompt_hints` + tests (snapshot, leak, injection, size)
-3. Prompts in JSON/HTML/React + `privtrace prompt`
-4. `.privtrace.yml` schema + `privtrace init` + validation
-5. Fingerprints + baseline + new/fixed/existing diff + suppressions
-6. `privtrace ci` + gate + exit codes
-7. SARIF + PR comment Markdown + job summary
-8. GitHub Action + GHCR image workflow + example workflows (GitHub, GitLab, generic, pre-commit)
-9. Demo repo + `scripts/demo_ci.sh` + `docs/DEMO_SCRIPT_CI.md`
-10. Stretch: `privtrace ci --upload` + API + trends UI
+2. Fix prompt templates + generator + `fix_prompt_hints` + tests (snapshot, leak, injection, size) ✅
+3. Prompts in JSON/HTML/React + `privtrace prompt` ✅
+4. `.privtrace.yml` schema + `privtrace init` + validation ✅
+5. Fingerprints + baseline + new/fixed/existing diff + suppressions ✅
+6. `privtrace ci` + gate + exit codes ✅
+7. SARIF + PR comment Markdown + job summary ✅
+8. GitHub Action + GHCR image workflow + example workflows (GitHub, GitLab, generic, pre-commit) ✅ (image not built/published: see Needs DV)
+9. Demo repo + `scripts/demo_ci.sh` + `docs/DEMO_SCRIPT_CI.md` ✅
+10. Stretch: `privtrace ci --upload` + API + trends UI ✅ (minimal)
 
 ## 5. Decisions
 (The brief asked to stop for approval; per the follow-up instruction, I decided and logged here.)
@@ -143,8 +143,29 @@ template, `frontend/src/{types.ts,components/Report.tsx}`, `docs/ADDING_A_PACK.m
 14. **SARIF schema is vendored** in `backend/tests/data/` (tests run offline) and `jsonschema` is
     added as a dev dependency.
 
+15. **Stretch done, minimal:** `privtrace ci --upload` + `POST /api/ci/runs` (Bearer token from
+    `PRIVTRACE_CI_TOKEN`, uploads disabled when unset) + a "CI history" view (overall-score trend per
+    repo/branch, last 10 PRs). The server re-validates uploads as `CiReport`, so no code is stored.
+16. **Scanner fix found by the demo:** `model_dump(exclude={...})` / `include=` with literal field sets
+    are now honoured by taint tracking (an excluded password is no longer reported as logged).
+17. **Existing-bug fix:** the erasure template diff inserted its deletes *after* `return`; now before it.
+
 ## 6. Needs DV
-(Filled in as blocked items come up.)
+- **Docker image not built locally:** Docker Desktop was not running, so `Dockerfile.action` was not
+  test-built. It is a small variant of the root `Dockerfile`; build it with
+  `docker build -f Dockerfile.action -t privtrace-ci .`.
+- **GHCR publish:** needs the branch pushed and a tag (`git tag v1.0.0 && git push --tags`);
+  `.github/workflows/publish-action-image.yml` then publishes `ghcr.io/dhwani1608/privtrace-ci`.
+- **Real GitHub PR demo:** needs a public test repository: push `demo-repos/acme-chatbot`, open a PR
+  with `scripts/demo/risky-change.patch` applied, enable code scanning, and put the PR link in
+  `docs/DEMO_SCRIPT_CI.md`. The action itself has only been validated statically (YAML + `bash -n`
+  tests), not on a GitHub runner.
+- **Using the action from this repo** (`uses: dhwani1608/PrivTrace@main`) only works once this branch is
+  merged to `main` and pushed. Merging to `main` also redeploys Cloud Run.
+- **Dashboard uploads on Cloud Run:** set `PRIVTRACE_CI_TOKEN` (Secret Manager) on the service. History
+  lives in the SQLite file in `/tmp`, so it resets on restart; use Cloud SQL to keep it.
+- **Legal references** are still `reference_verified: false` (unchanged by v2), so prompts say
+  "reference pending review".
 
 ## 7. Questions (answered by decision above)
 - Base-branch vs committed baseline as the default? → `--base` when given, else the committed file

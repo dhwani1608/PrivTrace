@@ -6,7 +6,7 @@ import json
 import re
 import uuid
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +18,7 @@ from privtrace import DISCLAIMER, __version__
 from privtrace.api.jobs import load_result, run_job
 from privtrace.core.config import get_settings
 from privtrace.core.redaction import install_log_redaction
-from privtrace.db.models import ScanRecord
+from privtrace.db.models import CiRunRecord, ScanRecord
 from privtrace.db.session import get_sessionmaker
 from privtrace.models.enums import CheckType, ManualAnswerValue
 from privtrace.packs.loader import PackLoadError, load_packs, resolve_pack_ids
@@ -210,6 +210,76 @@ def create_app(sessionmaker_: sessionmaker[Session] | None = None, run_inline: b
                 s.delete(rec)
                 s.commit()
         return Response(status_code=204)
+
+    # ---------------- CI history (privtrace ci --upload) ----------------
+    MAX_UPLOAD_BYTES = 2_000_000
+
+    @app.post("/api/ci/runs", status_code=201)
+    async def upload_ci_run(request: Request, authorization: str | None = Header(None)) -> dict[str, object]:
+        import hmac
+
+        from pydantic import ValidationError
+
+        from privtrace.ci.report import CiReport
+
+        token = settings.ci_upload_token
+        if not token:
+            raise HTTPException(503, "CI uploads are disabled on this server (set PRIVTRACE_CI_TOKEN)")
+        given = (authorization or "").removeprefix("Bearer ").strip()
+        if not hmac.compare_digest(given.encode(), token.encode()):
+            raise HTTPException(401, "invalid or missing token")
+        body = await request.body()
+        if len(body) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "CI report too large")
+        try:
+            rep = CiReport.model_validate_json(body)  # unknown fields are dropped: only code-free metadata is kept
+        except ValidationError as e:
+            raise HTTPException(422, f"not a PrivTrace CI report: {e.errors()[0]['msg']}") from e
+        repo = rep.context.repo or "local"
+        rec = CiRunRecord(
+            id=uuid.uuid4().hex[:12], repo=repo[:200], ref=(rep.context.ref or None), sha=rep.context.sha,
+            pr_number=rep.context.pr_number, provider=rep.context.provider, passed=rep.gate.passed,
+            overall_score=rep.overall.after, overall_delta=rep.overall.delta,
+            new_count=rep.counts.get("new", 0), fixed_count=rep.counts.get("fixed", 0),
+            report_json=rep.model_dump_json(),
+        )
+        with sm()() as s:
+            s.add(rec)
+            s.commit()
+        return {"id": rec.id, "repo": repo, "passed": rep.gate.passed}
+
+    def _run_summary(r: CiRunRecord) -> dict[str, object]:
+        rep = json.loads(r.report_json)
+        return {
+            "id": r.id, "received_at": r.received_at.isoformat(), "repo": r.repo, "ref": r.ref, "sha": r.sha,
+            "pr_number": r.pr_number, "provider": r.provider, "passed": r.passed,
+            "overall_score": r.overall_score, "overall_delta": r.overall_delta,
+            "new": r.new_count, "fixed": r.fixed_count,
+            "packs": [{"pack_id": p["pack_id"], "short_name": p["short_name"], "score": p["after"], "delta": p["delta"]}
+                      for p in rep.get("packs", [])],
+            "reasons": rep.get("gate", {}).get("reasons", []),
+            "run_url": rep.get("context", {}).get("run_url"),
+        }
+
+    @app.get("/api/ci/repos")
+    def ci_repos() -> list[dict[str, object]]:
+        with sm()() as s:
+            recs = s.scalars(select(CiRunRecord).order_by(CiRunRecord.received_at.desc()).limit(2000)).all()
+        seen: dict[str, dict[str, object]] = {}
+        for r in recs:
+            if r.repo not in seen:
+                seen[r.repo] = {"repo": r.repo, "runs": 0, "last": _run_summary(r)}
+            seen[r.repo]["runs"] = int(seen[r.repo]["runs"]) + 1  # type: ignore[arg-type]
+        return list(seen.values())
+
+    @app.get("/api/ci/runs")
+    def ci_runs(repo: str, ref: str | None = None, limit: int = 100) -> list[dict[str, object]]:
+        with sm()() as s:
+            q = select(CiRunRecord).where(CiRunRecord.repo == repo)
+            if ref:
+                q = q.where(CiRunRecord.ref == ref)
+            recs = s.scalars(q.order_by(CiRunRecord.received_at.desc()).limit(min(limit, 500))).all()
+            return [_run_summary(r) for r in recs]
 
     # Single-container deploys (Render, HF Spaces): serve the built React UI from the same origin.
     # Mounted last so every /api and /health route above takes precedence.

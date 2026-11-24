@@ -1,4 +1,4 @@
-import type { Answer, ChecklistItem, PackSummary, ScanResult, ScanStatus } from "./types";
+import type { Answer, ChecklistItem, CiRepo, CiRun, PackSummary, ScanResult, ScanStatus } from "./types";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
@@ -43,5 +43,7 @@ export const api = {
   report: (scanId: string) => req<ScanResult>(`/api/scans/${scanId}/report.json`),
   reportHtmlUrl: (scanId: string, download = false) => `${BASE}/api/scans/${scanId}/report.html${download ? "?download=true" : ""}`,
   reportJsonUrl: (scanId: string) => `${BASE}/api/scans/${scanId}/report.json`,
+  ciRepos: () => req<CiRepo[]>("/api/ci/repos"),
+  ciRuns: (repo: string) => req<CiRun[]>(`/api/ci/runs?repo=${encodeURIComponent(repo)}&limit=200`),
   reportPdfUrl: (scanId: string) => `${BASE}/api/scans/${scanId}/report.pdf`,
 };

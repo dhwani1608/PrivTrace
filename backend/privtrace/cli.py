@@ -414,6 +414,8 @@ def ci(
     report_url: str | None = typer.Option(None, help="Link to the full report (shown in the PR comment)."),
     summary: bool | None = typer.Option(None, "--summary/--no-summary",
                                         help="Append Markdown to $GITHUB_STEP_SUMMARY (default: config report.job_summary)."),
+    upload: str | None = typer.Option(None, help="PrivTrace server URL: send the code-free result for score history."),
+    token: str | None = typer.Option(None, envvar="PRIVTRACE_TOKEN", help="Upload token (or PRIVTRACE_TOKEN)."),
     fail_on: str | None = typer.Option(None, help="Override gate.fail_on_severity: critical|high|medium|low|none."),
     min_score: float | None = typer.Option(None, help="Override gate.min_score."),
     packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
@@ -450,7 +452,33 @@ def ci(
         console.print(f"[red]error:[/red] PrivTrace could not complete the scan ({type(e).__name__}: {escape(str(e))})")
         raise typer.Exit(2) from e
     print_ci_summary(run)
+    if upload:
+        upload_ci_report(run.report, upload, token)
     raise typer.Exit(0 if run.decision.passed else 1)
+
+
+def upload_ci_report(report, server: str, token: str | None) -> bool:
+    """POST the code-free CiReport to <server>/api/ci/runs. Only runs when --upload is given.
+
+    A failed upload is reported but does not change the gate's exit code.
+    """
+    import httpx
+
+    url = server.rstrip("/") + "/api/ci/runs"
+    if not token:
+        typer.echo("upload skipped: no token (set --token or PRIVTRACE_TOKEN)", err=True)
+        return False
+    try:
+        resp = httpx.post(url, content=report.model_dump_json(), timeout=20,
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    except httpx.HTTPError as e:
+        typer.echo(f"upload failed: {type(e).__name__}", err=True)
+        return False
+    if resp.status_code >= 300:
+        typer.echo(f"upload failed: HTTP {resp.status_code} {resp.text[:200]}", err=True)
+        return False
+    typer.echo(f"uploaded CI result to {url} (no code was sent)", err=True)
+    return True
 
 
 def _write_ci_extras(run, *, sarif: Path | None, markdown: Path | None, codequality: Path | None,

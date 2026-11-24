@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
+import CiHistory from "./components/CiHistory";
 import Report from "./components/Report";
 import { ChecklistStep, ConnectStep, PacksStep, ProgressStep, type Source } from "./components/Steps";
 import { Icon } from "./components/ui";
@@ -40,6 +41,7 @@ export default function App() {
   const [aiAvailable, setAiAvailable] = useState(false);
   const [apiUp, setApiUp] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState<"scan" | "ci">("scan");
 
   useEffect(() => {
     api.health()
@@ -120,6 +122,10 @@ export default function App() {
           </ol>
 
           <div className="flex shrink-0 items-center gap-2">
+            <button onClick={() => setPage(page === "ci" ? "scan" : "ci")} aria-pressed={page === "ci"}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${page === "ci" ? "bg-violet-500/20 text-violet-100 ring-violet-400/40" : "text-zinc-300 ring-white/10 hover:bg-white/[.06]"}`}>
+              CI history
+            </button>
             <span className="md:hidden rounded-full bg-white/[.06] px-3 py-1 font-mono text-[11px] text-zinc-300">{idx + 1}/{STEPS.length} · {STEPS[idx][1]}</span>
             <span className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex ${aiAvailable ? "bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/30" : "bg-white/[.04] text-zinc-400 ring-1 ring-white/10"}`}>
               <span className="relative flex h-2 w-2">
@@ -141,6 +147,7 @@ export default function App() {
           </div>
         )}
 
+        {page === "ci" ? <CiHistory onBack={() => setPage("scan")} /> : (
         <div key={step} className="animate-fade-up">
           {step === "connect" && (
             <ConnectStep initial={source}
@@ -159,6 +166,7 @@ export default function App() {
               onUploadFixed={() => { setBaselineId(result.scan_id); setSource(null); setStep("connect"); }} onNew={reset} />
           )}
         </div>
+        )}
       </main>
 
       <footer className="relative z-10 border-t border-white/[.05] px-4 py-8">

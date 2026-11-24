@@ -172,3 +172,27 @@ export interface ScanResult {
   scoring_formula: string;
   disclaimer: string;
 }
+
+export interface CiRun {
+  id: string;
+  received_at: string;
+  repo: string;
+  ref: string | null;
+  sha: string | null;
+  pr_number: number | null;
+  provider: string;
+  passed: boolean;
+  overall_score: number | null;
+  overall_delta: number | null;
+  new: number;
+  fixed: number;
+  packs: { pack_id: string; short_name: string; score: number | null; delta: number | null }[];
+  reasons: string[];
+  run_url: string | null;
+}
+
+export interface CiRepo {
+  repo: string;
+  runs: number;
+  last: CiRun;
+}
