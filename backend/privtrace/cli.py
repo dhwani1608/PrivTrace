@@ -19,6 +19,8 @@ from privtrace.packs.loader import PackLoadError, load_packs
 app = typer.Typer(help="PrivTrace: scan code against compliance packs.", no_args_is_help=True)
 packs_app = typer.Typer(help="Inspect compliance packs.", no_args_is_help=True)
 app.add_typer(packs_app, name="packs")
+baseline_app = typer.Typer(help="Manage the committed findings baseline (.privtrace-baseline.json).", no_args_is_help=True)
+app.add_typer(baseline_app, name="baseline")
 
 console = Console()
 
@@ -314,19 +316,70 @@ def prompt(
             typer.echo("Clipboard not available here; the prompt is printed above.", err=True)
 
 
+def resolve_config(root: Path, config: Path | None, all_packs, *, required: bool = False):
+    """Load + validate `config` (or `<root>/.privtrace.yml` if present). Raises ConfigError."""
+    from privtrace.ci.config import DEFAULT_CONFIG_NAME, load_and_validate
+
+    path = config if config is not None else root / DEFAULT_CONFIG_NAME
+    if config is None and not path.exists() and not required:
+        return None
+    return load_and_validate(path, all_packs)
+
+
 def _scan_with_config(root: Path, packs: str | None, config: Path | None, packs_dir: Path | None):
     """Scan for CLI helpers. Honours .privtrace.yml (packs, rules, paths, answers) when present."""
-    from privtrace.fixprompt import PromptBuilder
+    from privtrace.ci.config import ConfigError
     from privtrace.findings import SourceCache
-    from privtrace.packs.loader import load_packs as _load, resolve_pack_ids
+    from privtrace.fixprompt import PromptBuilder
     from privtrace.scan import run_scan
 
-    pack_list = (packs or "dpdp,security").split(",")
-    result, facts = run_scan(root, pack_list, packs_dir=packs_dir)
-    all_packs = _load(packs_dir)
+    all_packs = load_packs(packs_dir)
+    try:
+        cfg = resolve_config(root, config, all_packs)
+    except ConfigError as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    pack_list = packs.split(",") if packs else (cfg.packs if cfg else ["dpdp", "security"])
+    from privtrace.packs.loader import resolve_pack_ids
+
     ids = resolve_pack_ids(pack_list, all_packs)
-    builder = PromptBuilder([all_packs[i] for i in ids], facts, SourceCache(root), ids)
-    return result, facts, {"builder": builder}
+    verify = "privtrace ci" if cfg else f"privtrace scan . --packs {','.join(ids)}"
+    result, facts = run_scan(root, ids, packs_dir=packs_dir, config=cfg, verify_cmd=verify)
+    builder = PromptBuilder([all_packs[i] for i in ids], facts, SourceCache(root), ids, verify_cmd=verify)
+    return result, facts, {"builder": builder, "config": cfg}
+
+
+@baseline_app.command("update")
+def baseline_update(
+    target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Repository root."),
+    config: Path | None = typer.Option(None, help="Config file (default: <target>/.privtrace.yml)."),
+    out: Path | None = typer.Option(None, help="Baseline file (default: baseline.file from the config)."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Scan the repository and write the baseline: today's findings become 'existing'.
+
+    Commit the file. In CI, only findings that are not in it count as new.
+    """
+    from privtrace.ci.baseline import baseline_from_result, write_baseline
+    from privtrace.ci.config import ConfigError
+    from privtrace.ci.gitutil import head_commit
+    from privtrace.core.redaction import install_log_redaction
+    from privtrace.scan import run_scan
+
+    install_log_redaction()
+    root = target.resolve()
+    try:
+        all_packs = load_packs(packs_dir)
+        cfg = resolve_config(root, config, all_packs, required=True)
+        result, _ = run_scan(root, cfg.packs, packs_dir=packs_dir, config=cfg, prompts=False, fixes=False)
+    except (ConfigError, PackLoadError) as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    dest = out or (root / cfg.baseline.file)
+    write_baseline(baseline_from_result(result, source="file", commit=head_commit(root)), dest)
+    score = "n/a" if result.overall_score is None else f"{result.overall_score:.0f}"
+    console.print(f"[green]wrote {dest}[/green] · {len(result.findings)} finding(s) recorded · overall score {score}")
+    console.print("The baseline contains fingerprints, rule ids, paths and scores only: no code.")
 
 
 @app.command()
