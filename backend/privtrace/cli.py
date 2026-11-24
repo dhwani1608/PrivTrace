@@ -349,6 +349,108 @@ def _scan_with_config(root: Path, packs: str | None, config: Path | None, packs_
     return result, facts, {"builder": builder, "config": cfg}
 
 
+def _fmt_score(v: float | None) -> str:
+    return "n/a" if v is None else f"{v:.0f}"
+
+
+def _fmt_delta(before: float | None, after: float | None) -> str:
+    if before is None or after is None:
+        return ""
+    d = after - before
+    if abs(d) < 0.05:
+        return " [dim](=)[/dim]"
+    return f" [green]▲{d:.0f}[/green]" if d > 0 else f" [red]▼{abs(d):.0f}[/red]"
+
+
+def print_ci_summary(run) -> None:
+    from privtrace.models.enums import RuleStatus
+
+    rep = run.report
+    badge = "[bold green]PASSED ✅[/bold green]" if rep.gate.passed else "[bold red]FAILED ❌[/bold red]"
+    console.rule(f"PrivTrace CI gate · {badge}")
+    base = rep.baseline.get("source") or "none"
+    console.print(f"Baseline: {escape(str(base))}   New: {rep.counts['new']}   Existing: {rep.counts['existing']}   "
+                  f"Fixed: {rep.counts['fixed']}   Blocking: {rep.counts['blocking']}")
+    t = Table("Framework", "Score", "Minimum")
+    t.add_row("Overall", _fmt_score(rep.overall.before) + " → " + _fmt_score(rep.overall.after)
+              + _fmt_delta(rep.overall.before, rep.overall.after) if rep.overall.before is not None
+              else _fmt_score(rep.overall.after), "" if rep.overall.minimum is None else f"{rep.overall.minimum:g}")
+    for p in rep.packs:
+        score = (_fmt_score(p.before) + " → " + _fmt_score(p.after) + _fmt_delta(p.before, p.after)
+                 if p.before is not None else _fmt_score(p.after))
+        t.add_row(p.short_name, score, "" if p.minimum is None else f"{p.minimum:g}")
+    console.print(t)
+    new = [f for f in run.diff.new]
+    if new:
+        console.print("[bold]New findings[/bold]")
+        for f in new[:20]:
+            mark = "[red]✗[/red]" if f.status == RuleStatus.failed else "[yellow]?[/yellow]"
+            block = " [red](blocking)[/red]" if f.fingerprint in rep.gate.blocking else ""
+            console.print(f"  {mark} {f.severity.value:<8} {f.rule_id:<15} [cyan]{escape(f.location)}[/cyan]{block} [dim]id {f.id}[/dim]")
+        if len(new) > 20:
+            console.print(f"  … {len(new) - 20} more")
+    if run.diff.fixed:
+        console.print(f"[green]Fixed: {len(run.diff.fixed)} finding(s) 🎉[/green]")
+    for r in rep.gate.reasons:
+        console.print(f"[red]• {escape(r)}[/red]")
+    for n in rep.gate.notes:
+        console.print(f"[dim]• {escape(n)}[/dim]")
+    console.print(f"[dim]{rep.disclaimer}[/dim]")
+
+
+@app.command()
+def ci(
+    target: Path = typer.Argument(Path("."), help="Repository root (default: current directory)."),
+    config: Path | None = typer.Option(None, help="Config file (default: <target>/.privtrace.yml)."),
+    packs: str | None = typer.Option(None, help="Override the packs from the config (comma-separated)."),
+    base: str | None = typer.Option(None, help="Git ref to compare against, e.g. origin/main (scanned locally)."),
+    baseline: Path | None = typer.Option(None, help="Baseline file (default: baseline.file from the config, if present)."),
+    json_out: Path | None = typer.Option(None, "--json", help="Write the code-free CI result JSON here."),
+    html: Path | None = typer.Option(None, "--html", help="Write the full HTML report here."),
+    report_json: Path | None = typer.Option(None, "--report-json", help="Write the full scan JSON (includes redacted prompts)."),
+    fail_on: str | None = typer.Option(None, help="Override gate.fail_on_severity: critical|high|medium|low|none."),
+    min_score: float | None = typer.Option(None, help="Override gate.min_score."),
+    packs_dir: Path | None = typer.Option(None, help="Override the packs directory."),
+) -> None:
+    """Run the CI compliance gate. Exit codes: 0 passed, 1 gate failed, 2 config or scan error.
+
+        privtrace ci --base origin/main --json out.json --html report.html
+    """
+    from privtrace.ci.config import ConfigError
+    from privtrace.ci.runner import CiOptions, run_ci
+    from privtrace.core.redaction import install_log_redaction
+
+    _utf8_stdout()
+    install_log_redaction()
+    try:
+        run = run_ci(CiOptions(root=target.resolve(), config=config, packs=packs, base=base, baseline=baseline,
+                               fail_on=fail_on, min_score=min_score, packs_dir=packs_dir),
+                     on_stage=lambda s: console.print(f"[dim]… {s}[/dim]"))
+        if json_out:
+            json_out.parent.mkdir(parents=True, exist_ok=True)
+            json_out.write_text(run.report.model_dump_json(indent=2), encoding="utf-8")
+        if report_json:
+            write_report(run.head, report_json if report_json.suffix == ".json" else report_json.with_suffix(".json"))
+        if html:
+            write_report(run.head, html)
+        _write_ci_extras(run)
+    except typer.Exit:
+        raise
+    except (ConfigError, PackLoadError) as e:
+        console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    except Exception as e:  # an error must never look like a pass
+        console.print(f"[red]error:[/red] PrivTrace could not complete the scan ({type(e).__name__}: {escape(str(e))})")
+        raise typer.Exit(2) from e
+    print_ci_summary(run)
+    raise typer.Exit(0 if run.decision.passed else 1)
+
+
+def _write_ci_extras(run) -> None:
+    """Hook for extra CI outputs (SARIF, Markdown, job summary)."""
+    return None
+
+
 @baseline_app.command("update")
 def baseline_update(
     target: Path = typer.Option(Path("."), "--target", "-t", exists=True, file_okay=False, help="Repository root."),

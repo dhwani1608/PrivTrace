@@ -47,3 +47,12 @@ def worktree_at(root: Path, commit: str) -> Iterator[Path]:
         _git(root, "worktree", "remove", "--force", str(path), check=False)
         shutil.rmtree(tmp, ignore_errors=True)
         _git(root, "worktree", "prune", check=False)
+
+
+def repo_subpath(root: Path) -> Path:
+    """`root` relative to the repository top level (Path('.') when it *is* the top level)."""
+    top = Path(_git(root, "rev-parse", "--show-toplevel")).resolve()
+    try:
+        return root.resolve().relative_to(top)
+    except ValueError:
+        return Path(".")
